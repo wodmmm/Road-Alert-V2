@@ -228,41 +228,44 @@
         }
 
         // --- MQTT ---
-function startMQTT() {
-    // 8884 is the standard WSS port for the public broker
-    // The "/mqtt" path is required for many WebSocket implementations
-    client = new Paho.MQTT.Client(
-        "broker.hivemq.com", 
-        8884, 
-        "/mqtt", 
-        "driver-" + Math.random().toString(16).substr(2, 8)
-    );
-    
-    client.onConnectionLost = (resp) => {
-        document.getElementById('mqtt-status').innerText = "Offline";
-        document.getElementById('mqtt-status').style.color = "#ef4444";
-        log("MQTT Connection Lost: " + resp.errorMessage);
-        setTimeout(startMQTT, 5000);
-    };
+        function startMQTT() {
+            // Port 8884 is the Secure WebSocket (WSS) port for HiveMQ
+            client = new Paho.MQTT.Client("broker.hivemq.com", Number(8884), "driver-" + Math.random().toString(16).substr(2, 8));
+            
+            client.onConnectionLost = (resp) => {
+                document.getElementById('mqtt-status').innerText = "Offline";
+                document.getElementById('mqtt-status').style.color = "#ef4444";
+                log("MQTT Connection Lost");
+                setTimeout(startMQTT, 5000);
+            };
 
-    client.onMessageArrived = (msg) => {
-        // ... (your existing logic)
-    };
+            client.onMessageArrived = (msg) => {
+                try {
+                    const data = JSON.parse(msg.payloadString);
+                    if (myLocation && data.lat && data.lon) {
+                        const dist = getDistance(myLocation.lat, myLocation.lon, data.lat, data.lon);
+                        
+                        if (dist < ALERT_THRESHOLD) {
+                            triggerAlert(data.type, Math.round(dist));
+                        } else {
+                            hideAlert();
+                        }
+                    }
+                } catch (e) {
+                    // Ignore non-json or malformed
+                }
+            };
 
-    client.connect({
-        onSuccess: () => {
-            document.getElementById('mqtt-status').innerText = "Online";
-            document.getElementById('mqtt-status').style.color = "#4ade80";
-            client.subscribe("roadalert/telemetry");
-            log("System Online. Waiting for VRUs...");
-        },
-        useSSL: true,
-        timeout: 3,
-        onFailure: (err) => {
-            log("Connect Failed: " + err.errorMessage);
+            client.connect({
+                onSuccess: () => {
+                    document.getElementById('mqtt-status').innerText = "Online";
+                    document.getElementById('mqtt-status').style.color = "#4ade80";
+                    client.subscribe("roadalert/telemetry");
+                    log("System Online. Waiting for VRUs...");
+                },
+                useSSL: true // Must be true for GitHub Pages (HTTPS)
+            });
         }
-    });
-}
 
         let alertActive = false;
         function triggerAlert(type, dist) {
