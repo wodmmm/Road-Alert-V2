@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Road Alert | Driver App</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: rgba(30, 41, 59, 0.7);
+            --accent-color: #38bdf8;
+            --alert-color: #ef4444;
+            --text-color: #f8fafc;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            text-align: center;
+        }
+
+        #dashboard {
+            background: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            padding: 2rem;
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            width: 80%;
+            max-width: 400px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: var(--accent-color);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .status-item {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            border-radius: 12px;
+        }
+
+        .status-label {
+            font-size: 0.7rem;
+            opacity: 0.6;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+
+        .status-value {
+            font-size: 1rem;
+            font-weight: bold;
+        }
+
+        #alert-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--alert-color);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.9; }
+            50% { opacity: 1; }
+            100% { opacity: 0.9; }
+        }
+
+        .alert-icon {
+            font-size: 5rem;
+            margin-bottom: 1rem;
+        }
+
+        .alert-text {
+            font-size: 2.5rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .alert-subtext {
+            font-size: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        #start-btn {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 10px 15px -3px rgba(56, 189, 248, 0.4);
+            transition: transform 0.2s;
+        }
+
+        #start-btn:active {
+            transform: scale(0.95);
+        }
+
+        #log {
+            font-family: monospace;
+            font-size: 0.8rem;
+            margin-top: 1rem;
+            opacity: 0.5;
+            height: 60px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="dashboard">
+        <h1>Road Alert</h1>
+        <div class="status-grid">
+            <div class="status-item">
+                <div class="status-label">Network</div>
+                <div id="mqtt-status" class="status-value">Disconnected</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">GPS</div>
+                <div id="gps-status" class="status-value">Waiting...</div>
+            </div>
+        </div>
+        
+        <button id="start-btn" onclick="startApp()">Start System</button>
+        
+        <div id="log">Ready. Connect your phone to your car audio.</div>
+    </div>
+
+    <div id="alert-overlay">
+        <div class="alert-icon">⚠️</div>
+        <div class="alert-text">HORSE AHEAD</div>
+        <div id="alert-distance" class="alert-subtext">200m</div>
+    </div>
+
+    <script>
+        let client;
+        let myLocation = null;
+        let wakeLock = null;
+        const ALERT_THRESHOLD = 500; // Meters
+
+        function log(msg) {
+            console.log(msg);
+            document.getElementById('log').innerText = msg;
+        }
+
+        // --- MATH: HAVERSINE DISTANCE ---
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // Earth radius in meters
+            const φ1 = lat1 * Math.PI/180;
+            const φ2 = lat2 * Math.PI/180;
+            const Δφ = (lat2-lat1) * Math.PI/180;
+            const Δλ = (lon2-lon1) * Math.PI/180;
+
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+            return R * c;
+        }
+
+        // --- VOICE ALERTS ---
+        function speak(text) {
+            const msg = new SpeechSynthesisUtterance();
+            msg.text = text;
+            msg.rate = 1.1;
+            window.speechSynthesis.speak(msg);
+        }
+
+        // --- GPS ---
+        function startGPS() {
+            if ("geolocation" in navigator) {
+                navigator.geolocation.watchPosition(
+                    (pos) => {
+                        myLocation = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+                        document.getElementById('gps-status').innerText = "Locked";
+                        document.getElementById('gps-status').style.color = "#4ade80";
+                        log(`GPS: ${myLocation.lat.toFixed(4)}, ${myLocation.lon.toFixed(4)}`);
+                    },
+                    (err) => {
+                        log("GPS Error: " + err.message);
+                    },
+                    { enableHighAccuracy: true }
+                );
+            }
+        }
+
+        // --- WAKE LOCK ---
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    log("Wake Lock Active");
+                }
+            } catch (err) {
+                log("Wake Lock Failed: " + err.message);
+            }
+        }
+
+        // --- MQTT ---
+        function startMQTT() {
+            client = new Paho.MQTT.Client("broker.hivemq.com", Number(8000), "driver-" + Math.random().toString(16).substr(2, 8));
+            
+            client.onConnectionLost = (resp) => {
+                document.getElementById('mqtt-status').innerText = "Offline";
+                document.getElementById('mqtt-status').style.color = "#ef4444";
+                log("MQTT Connection Lost");
+                setTimeout(startMQTT, 5000);
+            };
+
+            client.onMessageArrived = (msg) => {
+                try {
+                    const data = JSON.parse(msg.payloadString);
+                    if (myLocation && data.lat && data.lon) {
+                        const dist = getDistance(myLocation.lat, myLocation.lon, data.lat, data.lon);
+                        
+                        if (dist < ALERT_THRESHOLD) {
+                            triggerAlert(data.type, Math.round(dist));
+                        } else {
+                            hideAlert();
+                        }
+                    }
+                } catch (e) {
+                    // Ignore non-json or malformed
+                }
+            };
+
+            client.connect({
+                onSuccess: () => {
+                    document.getElementById('mqtt-status').innerText = "Online";
+                    document.getElementById('mqtt-status').style.color = "#4ade80";
+                    client.subscribe("roadalert/telemetry");
+                    log("System Online. Waiting for VRUs...");
+                },
+                useSSL: false // Set to true if running over HTTPS
+            });
+        }
+
+        let alertActive = false;
+        function triggerAlert(type, dist) {
+            const overlay = document.getElementById('alert-overlay');
+            const distLabel = document.getElementById('alert-distance');
+            
+            overlay.style.display = 'flex';
+            distLabel.innerText = dist + "m";
+            
+            if (!alertActive) {
+                alertActive = true;
+                speak(`Warning! ${type === 'HOR' ? 'Horse' : 'User'} ahead. ${dist} meters.`);
+            }
+        }
+
+        function hideAlert() {
+            document.getElementById('alert-overlay').style.display = 'none';
+            alertActive = false;
+        }
+
+        function startApp() {
+            document.getElementById('start-btn').style.display = 'none';
+            log("Initializing...");
+            
+            // Critical: Initialize audio on user interaction
+            speak("Road Alert Activated. Driving mode active.");
+            
+            startGPS();
+            startMQTT();
+            requestWakeLock();
+        }
+    </script>
+</body>
+</html>

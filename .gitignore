@@ -1,0 +1,11 @@
+# Ignore Python temporary files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ignore configuration and scratch files
+vru_config.json
+scratch/
+bridge/
+*.log
+.reticulum/
