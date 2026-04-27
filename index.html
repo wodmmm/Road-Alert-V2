@@ -229,7 +229,8 @@
 
         // --- MQTT ---
         function startMQTT() {
-            client = new Paho.MQTT.Client("broker.hivemq.com", Number(8000), "driver-" + Math.random().toString(16).substr(2, 8));
+            // Port 8084 is the Secure WebSocket (WSS) port for HiveMQ
+            client = new Paho.MQTT.Client("broker.hivemq.com", Number(8084), "driver-" + Math.random().toString(16).substr(2, 8));
             
             client.onConnectionLost = (resp) => {
                 document.getElementById('mqtt-status').innerText = "Offline";
@@ -262,7 +263,7 @@
                     client.subscribe("roadalert/telemetry");
                     log("System Online. Waiting for VRUs...");
                 },
-                useSSL: false // Set to true if running over HTTPS
+                useSSL: true // Must be true for GitHub Pages (HTTPS)
             });
         }
 
