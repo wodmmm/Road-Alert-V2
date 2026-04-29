@@ -35,161 +35,108 @@
             border-radius: 24px;
             border: 1px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            width: 80%;
-            max-width: 400px;
+            width: 85%;
+            max-width: 450px;
         }
 
-        h1 {
-            font-size: 1.5rem;
-            margin-bottom: 1.5rem;
-            color: var(--accent-color);
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
+        h1 { font-size: 1.5rem; margin-bottom: 1.5rem; color: var(--accent-color); text-transform: uppercase; letter-spacing: 2px; }
 
-        .status-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-
-        .status-item {
-            background: rgba(0, 0, 0, 0.3);
-            padding: 1rem;
-            border-radius: 12px;
-        }
-
-        .status-label {
-            font-size: 0.7rem;
-            opacity: 0.6;
-            text-transform: uppercase;
-            margin-bottom: 0.5rem;
-        }
-
-        .status-value {
-            font-size: 1rem;
-            font-weight: bold;
-        }
+        .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem; }
+        .status-item { background: rgba(0, 0, 0, 0.3); padding: 1rem; border-radius: 12px; }
+        .status-label { font-size: 0.7rem; opacity: 0.6; text-transform: uppercase; margin-bottom: 0.5rem; }
+        .status-value { font-size: 1rem; font-weight: bold; }
 
         #alert-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background-color: var(--alert-color);
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            animation: pulse 1s infinite;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 1000; animation: pulse 1s infinite;
         }
 
-        @keyframes pulse {
-            0% { opacity: 0.9; }
-            50% { opacity: 1; }
-            100% { opacity: 0.9; }
-        }
+        @keyframes pulse { 0% { opacity: 0.95; } 50% { opacity: 1; } 100% { opacity: 0.95; } }
 
-        .alert-icon {
-            font-size: 5rem;
-            margin-bottom: 1rem;
-        }
-
-        .alert-text {
-            font-size: 2.5rem;
-            font-weight: 900;
-            text-transform: uppercase;
-        }
-
-        .alert-subtext {
-            font-size: 1.5rem;
-            margin-top: 1rem;
-        }
+        .alert-icon { font-size: 5rem; margin-bottom: 1rem; }
+        .alert-text { font-size: 2.5rem; font-weight: 900; text-transform: uppercase; }
+        .alert-subtext { font-size: 1.5rem; margin-top: 1rem; }
 
         #start-btn {
-            background: var(--accent-color);
-            color: white;
-            border: none;
-            padding: 1rem 2rem;
-            font-size: 1.2rem;
-            font-weight: bold;
-            border-radius: 50px;
-            cursor: pointer;
+            background: var(--accent-color); color: white; border: none; padding: 1.2rem 2.5rem;
+            font-size: 1.2rem; font-weight: bold; border-radius: 50px; cursor: pointer;
             box-shadow: 0 10px 15px -3px rgba(56, 189, 248, 0.4);
-            transition: transform 0.2s;
+            transition: all 0.2s;
         }
 
-        #start-btn:active {
-            transform: scale(0.95);
-        }
+        #start-btn:active { transform: scale(0.95); }
 
         #log {
-            font-family: monospace;
-            font-size: 0.8rem;
-            margin-top: 1rem;
-            opacity: 0.5;
-            height: 60px;
-            overflow: hidden;
+            font-family: monospace; font-size: 0.8rem; margin-top: 1.5rem;
+            opacity: 0.5; height: 80px; overflow-y: auto; text-align: left;
+            border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem;
         }
     </style>
 </head>
 <body>
 
     <div id="dashboard">
-        <h1>Road Alert</h1>
+        <h1>Road Alert v2.0</h1>
         <div class="status-grid">
             <div class="status-item">
-                <div class="status-label">Network</div>
+                <div class="status-label">MQTT Connection</div>
                 <div id="mqtt-status" class="status-value">Disconnected</div>
             </div>
             <div class="status-item">
-                <div class="status-label">GPS</div>
+                <div class="status-label">GPS Status</div>
                 <div id="gps-status" class="status-value">Waiting...</div>
             </div>
         </div>
         
-        <button id="start-btn" onclick="startApp()">Start System</button>
+        <button id="start-btn" onclick="startApp()">Start Safety Monitor</button>
         
-        <div id="log">Ready. Connect your phone to your car audio.</div>
+        <div id="log">Status: Awaiting initialization...</div>
     </div>
 
     <div id="alert-overlay">
         <div class="alert-icon">⚠️</div>
         <div class="alert-text">HORSE AHEAD</div>
-        <div id="alert-distance" class="alert-subtext">200m</div>
+        <div id="alert-distance" class="alert-subtext">Calculating...</div>
     </div>
 
     <script>
+        // --- GLOBALS ---
         let client;
         let myLocation = null;
         let wakeLock = null;
-        const ALERT_THRESHOLD = 500; // Meters
+        let vruStore = {}; // { id: { lat, lon, ts, lastDist, activeAlert } }
+
+        const CONFIG = {
+            ALERT_THRESHOLD: 500,     // Start alert at 500m
+            SILENT_TRACK_LIMIT: 600,  // Start tracking trend at 600m
+            FAILSAFE_LIMIT: 200,      // Alert immediately if < 200m
+            STALE_LIMIT_SEC: 90,      // Consider a VRU gone after 90s (giving 30s buffer)
+            MQTT_BROKER: "broker.hivemq.com",
+            MQTT_PORT: 8884,
+            MQTT_PATH: "/mqtt",
+            CLIENT_ID: "road-alert-driver-" + Math.random().toString(16).substr(2, 6)
+        };
 
         function log(msg) {
-            console.log(msg);
-            document.getElementById('log').innerText = msg;
+            const logDiv = document.getElementById('log');
+            logDiv.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
         }
 
-        // --- MATH: HAVERSINE DISTANCE ---
+        // --- NAVIGATION MATH ---
         function getDistance(lat1, lon1, lat2, lon2) {
             const R = 6371e3; // Earth radius in meters
-            const φ1 = lat1 * Math.PI/180;
-            const φ2 = lat2 * Math.PI/180;
-            const Δφ = (lat2-lat1) * Math.PI/180;
-            const Δλ = (lon2-lon1) * Math.PI/180;
-
-            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                      Math.cos(φ1) * Math.cos(φ2) *
-                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-            return R * c;
+            const phi1 = lat1 * Math.PI/180;
+            const phi2 = lat2 * Math.PI/180;
+            const dphi = (lat2-lat1) * Math.PI/180;
+            const dlambda = (lon2-lon1) * Math.PI/180;
+            const a = Math.sin(dphi/2) * Math.sin(dphi/2) + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dlambda/2) * Math.sin(dlambda/2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
         }
 
-        // --- VOICE ALERTS ---
+        // --- AUDIO ENGINE ---
         function speak(text) {
             const msg = new SpeechSynthesisUtterance();
             msg.text = text;
@@ -197,63 +144,111 @@
             window.speechSynthesis.speak(msg);
         }
 
-        // --- GPS ---
+        // --- PROXIMITY LOGIC (The "Brain") ---
+        function updateProximity() {
+            if (!myLocation) return;
+
+            const now = Date.now() / 1000;
+            let highestPriorityAlert = null;
+
+            for (const id in vruStore) {
+                const vru = vruStore[id];
+
+                // 1. Check for Staleness (Is the horse still there?)
+                if (now - vru.ts > CONFIG.STALE_LIMIT_SEC) {
+                    log(`Removing stale VRU: ${id}`);
+                    delete vruStore[id];
+                    continue;
+                }
+
+                // 2. Calculate Distance
+                const dist = getDistance(myLocation.lat, myLocation.lon, vru.lat, vru.lon);
+                
+                // 3. Determine Trend (Are we getting closer?)
+                // If lastDist is null (first sighting), we assume neutral
+                const isGettingCloser = vru.lastDist ? (dist < vru.lastDist) : true;
+                vru.lastDist = dist;
+
+                // 4. Decision Logic
+                let shouldAlert = false;
+
+                if (dist < CONFIG.FAILSAFE_LIMIT) {
+                    shouldAlert = true; // Failsafe: Too close, ignore trend
+                } else if (dist < CONFIG.ALERT_THRESHOLD && isGettingCloser) {
+                    shouldAlert = true; // Danger Zone: Alert only if closing in
+                }
+
+                if (shouldAlert) {
+                    highestPriorityAlert = { id, dist: Math.round(dist), type: vru.type };
+                }
+            }
+
+            if (highestPriorityAlert) {
+                showVisualAlert(highestPriorityAlert);
+            } else {
+                hideVisualAlert();
+            }
+        }
+
+        function showVisualAlert(alert) {
+            const overlay = document.getElementById('alert-overlay');
+            overlay.style.display = 'flex';
+            document.getElementById('alert-distance').innerText = alert.dist + "m";
+            
+            // Handle Voice Trigger (Only once per VRU encounter)
+            if (!vruStore[alert.id].activeAlert) {
+                vruStore[alert.id].activeAlert = true;
+                const label = alert.type === 'HOR' ? 'Horse' : 'User';
+                speak(`Warning. ${label} ahead. ${alert.dist} meters.`);
+            }
+        }
+
+        function hideVisualAlert() {
+            document.getElementById('alert-overlay').style.display = 'none';
+        }
+
+        // --- HARDWARE INTERFACES ---
         function startGPS() {
             if ("geolocation" in navigator) {
                 navigator.geolocation.watchPosition(
                     (pos) => {
                         myLocation = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-                        document.getElementById('gps-status').innerText = "Locked";
+                        document.getElementById('gps-status').innerText = "Active";
                         document.getElementById('gps-status').style.color = "#4ade80";
-                        log(`GPS: ${myLocation.lat.toFixed(4)}, ${myLocation.lon.toFixed(4)}`);
+                        updateProximity(); // Check proximity on every move
                     },
-                    (err) => {
-                        log("GPS Error: " + err.message);
-                    },
+                    (err) => { log("GPS Error: " + err.message); },
                     { enableHighAccuracy: true }
                 );
             }
         }
 
-        // --- WAKE LOCK ---
-        async function requestWakeLock() {
-            try {
-                if ('wakeLock' in navigator) {
-                    wakeLock = await navigator.wakeLock.request('screen');
-                    log("Wake Lock Active");
-                }
-            } catch (err) {
-                log("Wake Lock Failed: " + err.message);
-            }
-        }
-
-        // --- MQTT ---
         function startMQTT() {
-            // Port 8084 is the Secure WebSocket (WSS) port for HiveMQ
-            client = new Paho.MQTT.Client("broker.hivemq.com", Number(8084), "driver-" + Math.random().toString(16).substr(2, 8));
+            client = new Paho.MQTT.Client(CONFIG.MQTT_BROKER, CONFIG.MQTT_PORT, CONFIG.MQTT_PATH, CONFIG.CLIENT_ID);
             
             client.onConnectionLost = (resp) => {
                 document.getElementById('mqtt-status').innerText = "Offline";
                 document.getElementById('mqtt-status').style.color = "#ef4444";
-                log("MQTT Connection Lost");
+                log("Reconnecting MQTT...");
                 setTimeout(startMQTT, 5000);
             };
 
             client.onMessageArrived = (msg) => {
                 try {
                     const data = JSON.parse(msg.payloadString);
-                    if (myLocation && data.lat && data.lon) {
-                        const dist = getDistance(myLocation.lat, myLocation.lon, data.lat, data.lon);
-                        
-                        if (dist < ALERT_THRESHOLD) {
-                            triggerAlert(data.type, Math.round(dist));
-                        } else {
-                            hideAlert();
-                        }
+                    if (data.id && data.lat && data.lon) {
+                        // Update or Add to store
+                        vruStore[data.id] = {
+                            lat: data.lat,
+                            lon: data.lon,
+                            ts: Date.now() / 1000,
+                            type: data.type || "VRU",
+                            lastDist: vruStore[data.id] ? vruStore[data.id].lastDist : null,
+                            activeAlert: vruStore[data.id] ? vruStore[data.id].activeAlert : false
+                        };
+                        updateProximity();
                     }
-                } catch (e) {
-                    // Ignore non-json or malformed
-                }
+                } catch (e) { log("Data Error: " + e.message); }
             };
 
             client.connect({
@@ -261,41 +256,34 @@
                     document.getElementById('mqtt-status').innerText = "Online";
                     document.getElementById('mqtt-status').style.color = "#4ade80";
                     client.subscribe("roadalert/telemetry");
-                    log("System Online. Waiting for VRUs...");
+                    log("Connected to Safety Feed.");
                 },
-                useSSL: true // Must be true for GitHub Pages (HTTPS)
+                useSSL: true,
+                cleanSession: false, // PERSISTENT SESSION: Broker holds missed messages
+                onFailure: (err) => { log("MQTT Fail: " + err.errorMessage); }
             });
         }
 
-        let alertActive = false;
-        function triggerAlert(type, dist) {
-            const overlay = document.getElementById('alert-overlay');
-            const distLabel = document.getElementById('alert-distance');
-            
-            overlay.style.display = 'flex';
-            distLabel.innerText = dist + "m";
-            
-            if (!alertActive) {
-                alertActive = true;
-                speak(`Warning! ${type === 'HOR' ? 'Horse' : 'User'} ahead. ${dist} meters.`);
-            }
-        }
-
-        function hideAlert() {
-            document.getElementById('alert-overlay').style.display = 'none';
-            alertActive = false;
-        }
-
-        function startApp() {
+        async function startApp() {
             document.getElementById('start-btn').style.display = 'none';
-            log("Initializing...");
+            log("System Initializing...");
             
-            // Critical: Initialize audio on user interaction
-            speak("Road Alert Activated. Driving mode active.");
+            // Initialize Audio
+            speak("Road Alert System Initialized. Safe travels.");
             
+            // Wake Lock to prevent screen timeout
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    log("Screen Wake Lock Active.");
+                } catch (err) { log("Wake Lock Error."); }
+            }
+
             startGPS();
             startMQTT();
-            requestWakeLock();
+            
+            // Cleanup Loop (Runs every 10s to remove stale markers)
+            setInterval(updateProximity, 10000);
         }
     </script>
 </body>
