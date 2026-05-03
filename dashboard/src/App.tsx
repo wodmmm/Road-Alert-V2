@@ -13,14 +13,10 @@ const EXPIRATION_TIMEOUT_MS = 120000; // 2 minutes
 const App: React.FC = () => {
   const [userPos, setUserPos] = useState<DevicePos | null>(null);
   const [beacons, setBeacons] = useState<Beacon[]>([]);
-  const [audioEnabled, setAudioEnabled] = useState(false);
   const [hasCentered, setHasCentered] = useState(false);
-  const [isStarted, setIsStarted] = useState(false);
 
   // 1. MQTT Listener
   useEffect(() => {
-    if (!isStarted) return;
-
     const client = mqtt.connect(MQTT_BROKER);
 
     client.on('connect', () => {
@@ -72,7 +68,7 @@ const App: React.FC = () => {
     return () => {
       client.end();
     };
-  }, [isStarted]);
+  }, []);
 
   // 2. Expiration Timer (Cleanup stale beacons)
   useEffect(() => {
@@ -86,7 +82,7 @@ const App: React.FC = () => {
 
   // 3. Watch user position
   useEffect(() => {
-    if (!isStarted || !navigator.geolocation) return;
+    if (!navigator.geolocation) return;
 
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
@@ -98,12 +94,7 @@ const App: React.FC = () => {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [isStarted]);
-
-  const startApp = () => {
-    setIsStarted(true);
-    // Request notification permission or audio if needed
-  };
+  }, []);
 
   return (
     <div className="app-container">
@@ -118,21 +109,7 @@ const App: React.FC = () => {
         onCentered={() => setHasCentered(true)}
       />
 
-      {!isStarted && (
-        <div className="start-overlay">
-            <button className="start-btn" onClick={startApp}>
-                START TRACKER
-            </button>
-        </div>
-      )}
-
       <div className="controls-overlay">
-        <button 
-            className={`audio-btn ${audioEnabled ? 'active' : ''}`}
-            onClick={() => setAudioEnabled(!audioEnabled)}
-        >
-            {audioEnabled ? '🔊' : '🔇'}
-        </button>
         <button 
             className="recenter-btn"
             onClick={() => setHasCentered(false)}
