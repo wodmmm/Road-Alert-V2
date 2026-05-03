@@ -1,0 +1,272 @@
+[ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 1; @symbol_importdef<0> = [Toybox,1,7,13]; @symbol_importdef<1> = [Time,1,14,18]; ]
+import Toybox.Time;
+[ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 2; @symbol_importdef<0> = [Toybox,2,7,13]; @symbol_importdef<1> = [Activity,2,14,22]; ]
+import Toybox.Activity;
+[ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 3; @symbol_importdef<0> = [Toybox,3,7,13]; @symbol_importdef<1> = [Communications,3,14,28]; ]
+import Toybox.Communications;
+[ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 4; @symbol_importdef<0> = [Toybox,4,7,13]; @symbol_importdef<1> = [Lang,4,14,18]; ]
+import Toybox.Lang;
+[ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 5; @symbol_importdef<0> = [Toybox,5,7,13]; @symbol_importdef<1> = [Timer,5,14,19]; ]
+import Toybox.Timer;
+[ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 6; @symbol_importdef<0> = [Toybox,6,7,13]; @symbol_importdef<1> = [WatchUi,6,14,21]; ]
+import Toybox.WatchUi;
+[ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 8; @symbol_classdef = [GarminBeaconView,8,6,22]; @symbol_extends<0> = [WatchUi,8,31,38]; @symbol_extends<1> = [SimpleDataField,8,39,54]; ]
+class GarminBeaconView extends WatchUi.SimpleDataField {
+    [ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 8; ]
+    <init> {
+    }
+    [ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 8; ]
+    static
+    <init> {
+    }
+    [ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 10; @position = 16; @symbol_vardef = [_timer,10,16,22]; @symbol_type<0> = [Timer,10,28,33]; @symbol_type<1> = [Timer,10,34,39]; ]
+    private
+    var _timer as Timer.Timer;
+    [ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 11; @position = 16; @symbol_vardef = [_lastLat,11,16,24]; @symbol_type<0> = [Float,11,28,33]; ]
+    private
+    var _lastLat as Float = 0.0f;
+    [ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 12; @position = 16; @symbol_vardef = [_lastLon,12,16,24]; @symbol_type<0> = [Float,12,28,33]; ]
+    private
+    var _lastLon as Float = 0.0f;
+    [ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 13; @position = 16; @symbol_vardef = [_hasPos,13,16,23]; @symbol_type<0> = [Boolean,13,28,35]; ]
+    private
+    var _hasPos as Boolean = false;
+    [ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 14; @position = 16; @symbol_vardef = [_status,14,16,23]; @symbol_type<0> = [String,14,28,34]; ]
+    private
+    var _status as String = "No GPS";
+    [ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 16; @symbol_functiondef = [initialize,16,13,23]; ]
+    function initialize() as Void {
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_16_26_21_4_start:
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 17 8 ]
+        symbol [ SimpleDataField %tmp.2 17 8 23 ];
+        %tmp.2 = getv ? :SimpleDataField;
+        symbol [ initialize %tmp.3 17 24 34 ];
+        %tmp.3 = getv function %tmp.2 :initialize;
+        invoke %tmp.2 %tmp.3();
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 18 8 ]
+        %tmp.4 = "Beacon";
+        symbol [ label ? 18 8 13 ];
+        putv self :label %tmp.4;
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 19 8 ]
+        symbol [ Timer %tmp.7 19 21 26 ];
+        %tmp.7 = getm $.Toybox.Timer;
+        symbol [ Timer %tmp.8 19 27 32 ];
+        %tmp.8 = getv function ? %tmp.7 :Timer;
+        %tmp.5 = newc %tmp.8 ();
+        symbol [ _timer ? 19 8 14 ];
+        putv self :_timer %tmp.5;
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 20 8 ]
+        symbol [ _timer %tmp.10 20 8 14 ];
+        %tmp.10 = getv ? :_timer;
+        symbol [ start %tmp.11 20 15 20 ];
+        %tmp.11 = getv function %tmp.10 :start;
+        %tmp.12 = self;
+        symbol [ method %tmp.13 20 21 27 ];
+        %tmp.13 = getv function %tmp.12 :method;
+        %tmp.15 = const :onTick;
+        symbol [ onTick %tmp.15 20 29 35 const ];
+        %tmp.16 = invoke %tmp.12 %tmp.13(%tmp.15);
+        %tmp.17 = 25000;
+        %tmp.18 = true;
+        invoke %tmp.10 %tmp.11(%tmp.16, %tmp.17, %tmp.18);
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_16_26_21_4_stop:
+    }
+    [ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 24; @symbol_functiondef = [compute,24,13,20]; @symbol_param<0> = [info,24,21,25]; @symbol_param<0>_type<0> = [Activity,24,29,37]; @symbol_param<0>_type<1> = [Info,24,38,42]; @symbol_return<0> = [Numeric,24,47,54]; @symbol_return<1> = [Duration,24,58,66]; @symbol_return<2> = [String,24,70,76]; ]
+    function compute(info as Activity.Info) as Numeric or Duration or String or Null {
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_24_85_32_4_start:
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 25 8 ]
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_25_8_30_8_if_stmt:
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_25_12_25_65_begin:
+        %tmp.1 = lgetv %info;
+        symbol [ info %tmp.1 25 12 16 ];
+        %tmp.3 = const :currentLocation;
+        symbol [ currentLocation %tmp.3 25 22 37 const ];
+        %tmp.4 = canhazplz %tmp.1 %tmp.3;
+        bf %tmp.4 @C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_25_8_30_8_if_end;
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_25_41_25_65_true:
+        %tmp.5 = lgetv %info;
+        symbol [ info %tmp.5 25 41 45 ];
+        %tmp.6 = as %tmp.5 { (interface { var currentLocation; }) };
+        symbol [ currentLocation %tmp.7 25 46 61 ];
+        %tmp.7 = getv %tmp.6 :currentLocation;
+        %tmp.8 = null;
+        %tmp.9 = ne %tmp.7 %tmp.8;
+        push %tmp.9;
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_25_41_25_65_end:
+        %tmp.10 = phi [%tmp.4 @C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_25_12_25_65_begin] [%tmp.9 @C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_25_41_25_65_true] [%tmp.10 @C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_25_41_25_65_end];
+        bf %tmp.10 @C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_25_8_30_8_if_end;
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_25_8_30_8_if_true:
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_25_71_30_8_start:
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 26 12 ]
+        [ "C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_25_71_30_8_start" "C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_25_71_30_8_stop" ]
+        %coords.1 = local;
+        symbol [ coords %coords.1 26 16 22 ];
+        %tmp.11 = lgetv %info;
+        symbol [ info %tmp.11 26 25 29 ];
+        %tmp.12 = as %tmp.11 { (interface { var currentLocation; }) };
+        symbol [ currentLocation %tmp.13 26 30 45 ];
+        %tmp.13 = getv %tmp.12 :currentLocation;
+        symbol [ toDegrees %tmp.14 26 46 55 ];
+        %tmp.14 = getv function %tmp.13 :toDegrees;
+        %tmp.15 = invoke %tmp.13 %tmp.14();
+        lputv %coords.1 %tmp.15;
+        symbol [ coords %coords.1 26 16 22 ];
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 27 12 ]
+        %tmp.16 = lgetv %coords.1;
+        symbol [ coords %tmp.16 27 23 29 ];
+        %tmp.17 = 0;
+        %tmp.18 = agetv %tmp.16 %tmp.17;
+        symbol [ toFloat %tmp.19 27 33 40 ];
+        %tmp.19 = getv function %tmp.18 :toFloat;
+        %tmp.20 = invoke %tmp.18 %tmp.19();
+        symbol [ _lastLat ? 27 12 20 ];
+        putv self :_lastLat %tmp.20;
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 28 12 ]
+        %tmp.21 = lgetv %coords.1;
+        symbol [ coords %tmp.21 28 23 29 ];
+        %tmp.22 = 1;
+        %tmp.23 = agetv %tmp.21 %tmp.22;
+        symbol [ toFloat %tmp.24 28 33 40 ];
+        %tmp.24 = getv function %tmp.23 :toFloat;
+        %tmp.25 = invoke %tmp.23 %tmp.24();
+        symbol [ _lastLon ? 28 12 20 ];
+        putv self :_lastLon %tmp.25;
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 29 12 ]
+        %tmp.26 = true;
+        symbol [ _hasPos ? 29 12 19 ];
+        putv self :_hasPos %tmp.26;
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_25_71_30_8_stop:
+        goto @C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_25_8_30_8_if_end;
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_25_8_30_8_if_end:
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 31 8 ]
+        symbol [ _status %tmp.28 31 15 22 ];
+        %tmp.28 = getv ? :_status;
+        ret %tmp.28;
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_24_85_32_4_stop:
+    }
+    [ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 34; @symbol_functiondef = [onTick,34,13,19]; ]
+    function onTick() as Void {
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_34_30_60_4_start:
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 35 8 ]
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_35_8_38_8_if_stmt:
+        symbol [ _hasPos %tmp.2 35 13 20 ];
+        %tmp.2 = getv ? :_hasPos;
+        %tmp.3 = not %tmp.2;
+        bf %tmp.3 @C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_35_8_38_8_if_end;
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_35_8_38_8_if_true:
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_35_22_38_8_start:
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 36 12 ]
+        %tmp.4 = "No GPS";
+        symbol [ _status ? 36 12 19 ];
+        putv self :_status %tmp.4;
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 37 12 ]
+        ret ?;
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_35_22_38_8_stop:
+        goto @C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_35_8_38_8_if_end;
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_35_8_38_8_if_end:
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 40 8 ]
+        [ "C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_34_30_60_4_start" "C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_34_30_60_4_stop" ]
+        %payload.1 = local;
+        symbol [ payload %payload.1 40 12 19 ];
+        %tmp.5 = newd 3;
+        %tmp.6 = "type";
+        %tmp.7 = "CYC";
+        %tmp.8 = dup %tmp.5;
+        %tmp.9 = aputv %tmp.8 %tmp.6 %tmp.7;
+        %tmp.10 = "lat";
+        symbol [ _lastLat %tmp.12 42 22 30 ];
+        %tmp.12 = getv ? :_lastLat;
+        %tmp.13 = dup %tmp.9;
+        %tmp.14 = aputv %tmp.13 %tmp.10 %tmp.12;
+        %tmp.15 = "lon";
+        symbol [ _lastLon %tmp.17 43 22 30 ];
+        %tmp.17 = getv ? :_lastLon;
+        %tmp.18 = dup %tmp.14;
+        %tmp.19 = aputv %tmp.18 %tmp.15 %tmp.17;
+        lputv %payload.1 %tmp.19;
+        symbol [ payload %payload.1 40 12 19 ];
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 46 8 ]
+        symbol [ Communications %tmp.20 46 8 22 ];
+        %tmp.20 = getm $.Toybox.Communications;
+        symbol [ makeWebRequest %tmp.21 46 23 37 ];
+        %tmp.21 = getv function %tmp.20 :makeWebRequest;
+        %tmp.22 = "http://localhost:8080/beacon";
+        %tmp.23 = lgetv %payload.1;
+        symbol [ payload %tmp.23 48 12 19 ];
+        %tmp.24 = newd 3;
+        %tmp.26 = const :method;
+        symbol [ method %tmp.26 50 17 23 const ];
+        symbol [ Communications %tmp.27 50 33 47 ];
+        %tmp.27 = getm $.Toybox.Communications;
+        symbol [ HTTP_REQUEST_METHOD_POST %tmp.28 50 48 72 ];
+        %tmp.28 = getv %tmp.27 :HTTP_REQUEST_METHOD_POST;
+        %tmp.29 = dup %tmp.24;
+        %tmp.30 = aputv %tmp.29 %tmp.26 %tmp.28;
+        %tmp.32 = const :headers;
+        symbol [ headers %tmp.32 51 17 24 const ];
+        %tmp.33 = newd 1;
+        %tmp.34 = "Content-Type";
+        symbol [ Communications %tmp.35 52 38 52 ];
+        %tmp.35 = getm $.Toybox.Communications;
+        symbol [ REQUEST_CONTENT_TYPE_JSON %tmp.36 52 53 78 ];
+        %tmp.36 = getv %tmp.35 :REQUEST_CONTENT_TYPE_JSON;
+        %tmp.37 = dup %tmp.33;
+        %tmp.38 = aputv %tmp.37 %tmp.34 %tmp.36;
+        %tmp.39 = dup %tmp.30;
+        %tmp.40 = aputv %tmp.39 %tmp.32 %tmp.38;
+        %tmp.42 = const :responseType;
+        symbol [ responseType %tmp.42 54 17 29 const ];
+        symbol [ Communications %tmp.43 54 33 47 ];
+        %tmp.43 = getm $.Toybox.Communications;
+        symbol [ HTTP_RESPONSE_CONTENT_TYPE_JSON %tmp.44 54 48 79 ];
+        %tmp.44 = getv %tmp.43 :HTTP_RESPONSE_CONTENT_TYPE_JSON;
+        %tmp.45 = dup %tmp.40;
+        %tmp.46 = aputv %tmp.45 %tmp.42 %tmp.44;
+        %tmp.47 = self;
+        symbol [ method %tmp.48 56 12 18 ];
+        %tmp.48 = getv function %tmp.47 :method;
+        %tmp.50 = const :onResponse;
+        symbol [ onResponse %tmp.50 56 20 30 const ];
+        %tmp.51 = invoke %tmp.47 %tmp.48(%tmp.50);
+        invoke %tmp.20 %tmp.21(%tmp.22, %tmp.23, %tmp.46, %tmp.51);
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 59 8 ]
+        %tmp.52 = "Sending...";
+        symbol [ _status ? 59 8 15 ];
+        putv self :_status %tmp.52;
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_34_30_60_4_stop:
+    }
+    [ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 62; @symbol_functiondef = [onResponse,62,13,23]; @symbol_param<0> = [code,62,24,28]; @symbol_param<0>_type<0> = [Number,62,32,38]; @symbol_param<1> = [data,62,40,44]; @symbol_param<1>_type<0> = [Dictionary,62,48,58]; ]
+    function onResponse(code as Number, data as Dictionary or Null) as Void {
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_62_69_68_4_start:
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 63 8 ]
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_63_8_67_8_if_stmt:
+        %tmp.1 = lgetv %code;
+        symbol [ code %tmp.1 63 12 16 ];
+        %tmp.2 = 200;
+        %tmp.3 = eq %tmp.1 %tmp.2;
+        bf %tmp.3 @C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_63_8_67_8_if_else_false;
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_63_8_67_8_if_true:
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_63_25_65_8_start:
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 64 12 ]
+        %tmp.4 = "OK";
+        symbol [ _status ? 64 12 19 ];
+        putv self :_status %tmp.4;
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_63_25_65_8_stop:
+        goto @C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_63_8_67_8_if_end;
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_63_8_67_8_if_else_false:
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_65_15_67_8_start:
+[ "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc" 66 12 ]
+        %tmp.5 = "Err:";
+        %tmp.6 = lgetv %code;
+        symbol [ code %tmp.6 66 31 35 ];
+        %tmp.7 = add %tmp.5 %tmp.6;
+        symbol [ _status ? 66 12 19 ];
+        putv self :_status %tmp.7;
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_65_15_67_8_stop:
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_63_8_67_8_if_end:
+C__Users_Adam_Documents_Road_Alert_V2_GarminBeacon_source_GarminBeaconView_mc_62_69_68_4_stop:
+    }
+}
+[ @file = "C:\Users\Adam\Documents\Road Alert V2\GarminBeacon\source\GarminBeaconView.mc"; @line = 1; ]
+<init> {
+}

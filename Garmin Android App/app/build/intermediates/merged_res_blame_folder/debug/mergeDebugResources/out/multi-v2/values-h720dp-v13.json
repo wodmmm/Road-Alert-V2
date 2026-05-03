@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.roadalert.garminbridge.app-mergeDebugResources-29:/values-h720dp-v13/values-h720dp-v13.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\Adam\\.gradle\\caches\\9.0.0\\transforms\\a0d360fb826b64c6a88d482d1e70e671\\transformed\\appcompat-1.7.0\\res\\values-h720dp-v13\\values-h720dp-v13.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "66",
+                        "endOffsets": "117"
+                    }
+                }
+            ]
+        }
+    ]
+}

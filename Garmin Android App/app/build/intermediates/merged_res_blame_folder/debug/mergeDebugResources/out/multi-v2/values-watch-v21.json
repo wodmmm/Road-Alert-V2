@@ -1,0 +1,20 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.roadalert.garminbridge.app-mergeDebugResources-29:/values-watch-v21/values-watch-v21.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\Adam\\.gradle\\caches\\9.0.0\\transforms\\a0d360fb826b64c6a88d482d1e70e671\\transformed\\appcompat-1.7.0\\res\\values-watch-v21\\values-watch-v21.xml",
+                    "from": {
+                        "startLines": "2,6,10",
+                        "startColumns": "4,4,4",
+                        "startOffsets": "55,271,499",
+                        "endLines": "5,9,13",
+                        "endColumns": "12,12,12",
+                        "endOffsets": "266,494,724"
+                    }
+                }
+            ]
+        }
+    ]
+}

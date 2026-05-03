@@ -106,7 +106,7 @@
         let client;
         let myLocation = null;
         let wakeLock = null;
-        let vruStore = {}; // { id: { lat, lon, ts, lastDist, activeAlert } }
+        let vruStore = {}; // { id: { lat, lon, ts, lastDist, alertStage } }
 
         const CONFIG = {
             ALERT_THRESHOLD: 500,     // Start alert at 500m
@@ -195,10 +195,28 @@
             overlay.style.display = 'flex';
             document.getElementById('alert-distance').innerText = alert.dist + "m";
             
-            // Handle Voice Trigger (Only once per VRU encounter)
-            if (!vruStore[alert.id].activeAlert) {
-                vruStore[alert.id].activeAlert = true;
-                const label = alert.type === 'HOR' ? 'Horse' : 'User';
+            // Handle Voice Trigger for Multiple Stages (500m, 250m, 100m)
+            let stage = vruStore[alert.id].alertStage || 0;
+            let shouldSpeak = false;
+
+            if (alert.dist <= 500 && alert.dist > 250 && stage < 1) {
+                shouldSpeak = true;
+                vruStore[alert.id].alertStage = 1;
+            } else if (alert.dist <= 250 && alert.dist > 100 && stage < 2) {
+                shouldSpeak = true;
+                vruStore[alert.id].alertStage = 2;
+            } else if (alert.dist <= 100 && stage < 3) {
+                shouldSpeak = true;
+                vruStore[alert.id].alertStage = 3;
+            }
+
+            if (shouldSpeak) {
+                let label = "User";
+                if (alert.type === 'HOR') label = "Horse";
+                else if (alert.type === 'CYC') label = "Cyclist";
+                else if (alert.type === 'RUN') label = "Runner";
+                else if (alert.type === 'WAL') label = "Walker";
+                
                 speak(`Warning. ${label} ahead. ${alert.dist} meters.`);
             }
         }
@@ -237,14 +255,25 @@
                 try {
                     const data = JSON.parse(msg.payloadString);
                     if (data.id && data.lat && data.lon) {
-                        // Update or Add to store
+                        const msgTs = data.ts || (Date.now() / 1000);
+                        const now = Date.now() / 1000;
+                        
+                        // Debug log to confirm we are receiving data
+                        log(`Received ${data.type} signal from ${data.id}`);
+
+                        // Ignore if message is older than 90s (stale retained message)
+                        if (now - msgTs > 90) {
+                            console.log(`Ignoring stale message from ${data.id}`);
+                            return;
+                        }
+
                         vruStore[data.id] = {
                             lat: data.lat,
                             lon: data.lon,
-                            ts: Date.now() / 1000,
+                            ts: msgTs,
                             type: data.type || "VRU",
                             lastDist: vruStore[data.id] ? vruStore[data.id].lastDist : null,
-                            activeAlert: vruStore[data.id] ? vruStore[data.id].activeAlert : false
+                            alertStage: vruStore[data.id] ? vruStore[data.id].alertStage : 0
                         };
                         updateProximity();
                     }
@@ -255,7 +284,7 @@
                 onSuccess: () => {
                     document.getElementById('mqtt-status').innerText = "Online";
                     document.getElementById('mqtt-status').style.color = "#4ade80";
-                    client.subscribe("roadalert/telemetry");
+                    client.subscribe("roadalert/telemetry/#");
                     log("Connected to Safety Feed.");
                 },
                 useSSL: true,

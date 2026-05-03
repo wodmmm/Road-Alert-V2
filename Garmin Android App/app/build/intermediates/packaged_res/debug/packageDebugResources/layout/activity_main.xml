@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="32dp"
+    android:background="#0f172a">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Road Alert"
+        android:textColor="#38bdf8"
+        android:textSize="14sp"
+        android:letterSpacing="0.15"
+        android:textAllCaps="true"
+        android:layout_marginBottom="4dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Garmin Bridge"
+        android:textColor="#f8fafc"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="40dp" />
+
+    <Button
+        android:id="@+id/btnToggle"
+        android:layout_width="220dp"
+        android:layout_height="56dp"
+        android:text="Start Bridge"
+        android:textSize="16sp"
+        android:textColor="#ffffff"
+        android:backgroundTint="#38bdf8"
+        android:stateListAnimator="@null"
+        android:layout_marginBottom="24dp" />
+
+    <TextView
+        android:id="@+id/tvStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Tap Start Bridge to begin relaying Garmin GPS to Road Alert."
+        android:textColor="#94a3b8"
+        android:textSize="13sp"
+        android:gravity="center"
+        android:paddingHorizontal="16dp" />
+
+</LinearLayout>

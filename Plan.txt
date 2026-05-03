@@ -1,0 +1,14 @@
+Project Goal
+
+To create a safety app for vulnerable road users like horse riders, cyclists, walkers and runners.  The idea of the app is to alert motorists of the vulnerable road user before they see them.  Allowing them to know what is around blind bends and adjust their speed accordingly.
+
+Plan
+
+Create a phone app that talks to MQTT.  The app will utilise the phones mobile signal and location data and relay this to the MQTT server.  In rural areas with poor phone coverage the users can carry a LoRa device which connects to their phone and takes over relaying the data.
+The App is to be lightweight and run in the background once turned on.  It will utilise reticulum to manage the networking.  The Lora devices will run Rnode.
+We tested the Lora setup using meshcore but as this goes against what they do decided to go down the reticulum route instead.  As we are starting with horse riders we are hoping that in the rural areas that stables/yards will see the value in the Lora application and will host gateway devices creating their rural safety nets   
+I want to ask various horse associations to help with this.
+
+Currently MQTT sends the data to a dashboard which displays the data on a map.  each user type is displayed like a road sign as a warning.
+
+I want a driver app that is zero config and runs in the background on users phones and creates an alert when close to a vulnerable road user. An audible alert and also a visual alert.  We have not explored this idea very far as yet.  I would like to contact the fleet department of companies and ask them to push it out to their fleet as a free of charge safety app.  The goal is for google and apple to sit up and notice and implement it into their navigation
