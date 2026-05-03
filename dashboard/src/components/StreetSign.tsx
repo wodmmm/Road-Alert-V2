@@ -16,18 +16,18 @@ const StreetSign: React.FC<StreetSignProps> = ({ type, size = 48 }) => {
     switch (type) {
       case 'HOR':
       case 'HOS':
-        return <image href="/icons/horse.png" x="12" y="15" height="24" width="24" style={imageStyle} />;
+        return <image href="icons/horse.png" x="12" y="15" height="24" width="24" style={imageStyle} />;
       case 'CYC':
       case 'CYS':
-        return <image href="/icons/bike.png" x="12" y="15" height="24" width="24" style={imageStyle} />;
+        return <image href="icons/bike.png" x="12" y="15" height="24" width="24" style={imageStyle} />;
       case 'RUN':
       case 'RUS':
-        return <image href="/icons/runner.png" x="12" y="15" height="24" width="24" style={imageStyle} />;
+        return <image href="icons/runner.png" x="12" y="15" height="24" width="24" style={imageStyle} />;
       case 'PED':
       case 'WAL':
       case 'WAS':
       default:
-        return <image href="/icons/walker.png" x="12" y="15" height="24" width="24" style={imageStyle} />;
+        return <image href="icons/walker.png" x="12" y="15" height="24" width="24" style={imageStyle} />;
     }
   };
 
