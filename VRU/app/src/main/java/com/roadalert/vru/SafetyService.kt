@@ -18,17 +18,32 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
+import org.eclipse.paho.client.mqttv3.MqttCallbackExtended
 import org.eclipse.paho.client.mqttv3.MqttClient
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions
 import org.eclipse.paho.client.mqttv3.MqttMessage
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import org.json.JSONObject
+import java.io.File
+import java.io.FileWriter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
 
 /**
  * SafetyService — Broadcasts VRU telemetry to MQTT with Ghost-prevention.
  */
 class SafetyService : Service() {
+
+    companion object {
+        var isRunning = false
+        var activeUserType = "HOR"
+        var gpsStatusStr = "Waiting"
+        var mqttStatusStr = "Off"
+    }
 
     private val CHANNEL_ID = "SafetyServiceChannel"
     private val NOTIFICATION_ID = 1
@@ -57,8 +72,13 @@ class SafetyService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         userType = intent?.getStringExtra("USER_TYPE") ?: "HOR"
+        activeUserType = userType
+        isRunning = true
+        gpsStatusStr = "Waiting"
+        mqttStatusStr = "Connecting"
         startForeground(NOTIFICATION_ID, createNotification())
         startLocationUpdates()
+        logEvent("SERVICE_START", null, null, null)
         return START_STICKY
     }
 
@@ -84,7 +104,7 @@ class SafetyService : Service() {
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 if (isPaused) return
-                locationResult.lastLocation?.let { publishLocationToMqtt(it.latitude, it.longitude) }
+                locationResult.lastLocation?.let { publishLocationToMqtt(it) }
             }
         }
     }
@@ -99,26 +119,50 @@ class SafetyService : Service() {
         Thread {
             try {
                 Log.d(TAG, "Connecting to MQTT: $sessionId")
-                mqttClient = MqttClient("tcp://broker.hivemq.com:1883", sessionId, MemoryPersistence())
+                mqttClient = MqttClient("tcp://51.195.222.99:1883", sessionId, MemoryPersistence())
+                
+                mqttClient?.setCallback(object : MqttCallbackExtended {
+                    override fun connectionLost(cause: Throwable?) {
+                        Log.d(TAG, "MQTT Connection Lost: ${cause?.message}")
+                        updateStatus(null, "Disconnected")
+                        logEvent("MQTT_DISCONNECTED", null, null, null)
+                    }
+
+                    override fun messageArrived(topic: String?, message: MqttMessage?) {}
+
+                    override fun deliveryComplete(token: IMqttDeliveryToken?) {}
+
+                    override fun connectComplete(reconnect: Boolean, serverURI: String?) {
+                        Log.d(TAG, "MQTT Connection Complete (reconnect: $reconnect)")
+                        updateStatus(null, "Connected")
+                        logEvent("MQTT_CONNECTED", null, null, null)
+                    }
+                })
+
                 val opts = MqttConnectOptions().apply {
                     isCleanSession = true
                     isAutomaticReconnect = true
                     connectionTimeout = 30
                     keepAliveInterval = 60
+                    userName = "adam"
+                    password = "338Locking".toCharArray()
                     setWill(myTopic, ByteArray(0), 1, true)
                 }
 
                 mqttClient?.connect(opts)
-                Log.d(TAG, "MQTT Connected successfully")
-                updateStatus(null, "Connected")
+                Log.d(TAG, "MQTT Connection initiated successfully")
             } catch (e: Exception) { 
                 Log.e(TAG, "MQTT Connection Error: ${e.message}")
                 updateStatus(null, "Error") 
+                logEvent("MQTT_ERROR", null, null, null)
             }
         }.start()
     }
 
-    private fun publishLocationToMqtt(lat: Double, lon: Double) {
+    private fun publishLocationToMqtt(location: android.location.Location) {
+        val lat = location.latitude
+        val lon = location.longitude
+        val acc = location.accuracy
         Thread {
             try {
                 if (mqttClient?.isConnected == true) {
@@ -136,12 +180,15 @@ class SafetyService : Service() {
                     }
                     mqttClient?.publish(myTopic, msg)
                     updateStatus("Locked", null)
+                    logEvent("BROADCAST_SENT", lat, lon, acc)
                 }
             } catch (e: Exception) { Log.e(TAG, "MQTT Fail", e) }
         }.start()
     }
 
     override fun onDestroy() {
+        isRunning = false
+        logEvent("SERVICE_STOP", null, null, null)
         Thread {
             try {
                 if (mqttClient?.isConnected == true) {
@@ -159,11 +206,41 @@ class SafetyService : Service() {
     override fun onBind(intent: Intent): IBinder? = null
 
     private fun updateStatus(gps: String?, mqtt: String?) {
+        gps?.let { gpsStatusStr = it }
+        mqtt?.let { mqttStatusStr = it }
         val intent = Intent("com.roadalert.vru.STATUS_UPDATE").apply {
             setPackage(packageName)
             gps?.let { putExtra("gps", it) }
             mqtt?.let { putExtra("mqtt", it) }
         }
         sendBroadcast(intent)
+    }
+
+    private fun logEvent(eventType: String, lat: Double?, lon: Double?, accuracy: Float?) {
+        try {
+            val fileDir = getExternalFilesDir(null) ?: return
+            val file = File(fileDir, "vru_log.csv")
+            val isNewFile = !file.exists()
+            
+            val writer = FileWriter(file, true)
+            if (isNewFile) {
+                writer.append("Timestamp,EventType,Lat,Lon,UserType,MqttStatus,Accuracy\n")
+            }
+            
+            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+            sdf.timeZone = TimeZone.getTimeZone("UTC")
+            val timestamp = sdf.format(Date())
+            
+            val latStr = lat?.toString() ?: ""
+            val lonStr = lon?.toString() ?: ""
+            val accStr = accuracy?.toString() ?: ""
+            val mqttStatus = if (mqttClient?.isConnected == true) "CONNECTED" else "DISCONNECTED"
+            
+            writer.append("$timestamp,$eventType,$latStr,$lonStr,$userType,$mqttStatus,$accStr\n")
+            writer.flush()
+            writer.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }

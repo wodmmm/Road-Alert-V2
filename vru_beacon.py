@@ -29,6 +29,8 @@ USER_ID = CONFIG["user_id"]
 USER_TYPE = CONFIG["user_type"]
 MQTT_HOST = CONFIG["mqtt_host"]
 MQTT_PORT = CONFIG["mqtt_port"]
+MQTT_USER = CONFIG.get("mqtt_user", "")
+MQTT_PASS = CONFIG.get("mqtt_pass", "")
 MQTT_TOPIC = CONFIG["mqtt_topic"]
 APP_NAME = CONFIG["app_name"]
 ASPECT_NAME = CONFIG["aspect_name"]
@@ -82,6 +84,8 @@ def run_beacon():
     
     # Initialize MQTT
     mqtt_client = mqtt.Client()
+    if MQTT_USER and MQTT_PASS:
+        mqtt_client.username_pw_set(MQTT_USER, MQTT_PASS)
     
     try:
         while True:
@@ -105,7 +109,7 @@ def run_beacon():
                 try:
                     payload["path"] = "4G"
                     mqtt_client.connect(MQTT_HOST, MQTT_PORT, 10)
-                    mqtt_client.publish(MQTT_TOPIC, json.dumps(payload), retain=True)
+                    mqtt_client.publish(f"{MQTT_TOPIC}/{USER_ID}", json.dumps(payload), retain=True)
                     mqtt_client.disconnect()
                     path = "4G"
                     sent = True

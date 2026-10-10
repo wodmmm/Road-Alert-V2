@@ -3,9 +3,11 @@ import json
 import time
 
 # --- CONFIGURATION ---
-MQTT_HOST = "broker.hivemq.com"
+MQTT_HOST = "51.195.222.99"
 MQTT_PORT = 1883
-MQTT_TOPIC = "roadalert/telemetry"
+MQTT_USER = "adam"
+MQTT_PASS = "338Locking"
+MQTT_TOPIC = "roadalert/telemetry/#"
 
 # --- STATE ---
 last_seq = {}  # Store last sequence number per device ID
@@ -55,6 +57,8 @@ def on_message(client, userdata, msg):
 
 def run_monitor():
     client = mqtt.Client()
+    if MQTT_USER and MQTT_PASS:
+        client.username_pw_set(MQTT_USER, MQTT_PASS)
     client.on_connect = on_connect
     client.on_message = on_message
     

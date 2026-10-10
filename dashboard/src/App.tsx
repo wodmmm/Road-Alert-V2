@@ -6,7 +6,7 @@ import './App.css';
 import type { DevicePos, Beacon } from './types';
 
 // Configuration for the MQTT broker
-const MQTT_BROKER = 'wss://broker.hivemq.com:8884/mqtt';
+const MQTT_BROKER = 'ws://51.195.222.99:9001/mqtt';
 const MQTT_TOPIC = 'roadalert/telemetry/#'; // Wildcard for all sessions
 const EXPIRATION_TIMEOUT_MS = 120000; // 2 minutes
 
@@ -17,7 +17,10 @@ const App: React.FC = () => {
 
   // 1. MQTT Listener
   useEffect(() => {
-    const client = mqtt.connect(MQTT_BROKER);
+    const client = mqtt.connect(MQTT_BROKER, {
+      username: 'adam',
+      password: '338Locking'
+    });
 
     client.on('connect', () => {
       console.log('Connected to MQTT Broker via WebSockets');
@@ -37,7 +40,7 @@ const App: React.FC = () => {
         setBeacons(prev => {
           const now = Date.now();
           const existingIdx = prev.findIndex(b => b.id === beaconId);
-          
+
           if (existingIdx >= 0) {
             const updated = [...prev];
             updated[existingIdx] = {
@@ -110,11 +113,11 @@ const App: React.FC = () => {
       />
 
       <div className="controls-overlay">
-        <button 
-            className="recenter-btn"
-            onClick={() => setHasCentered(false)}
+        <button
+          className="recenter-btn"
+          onClick={() => setHasCentered(false)}
         >
-            🎯
+          🎯
         </button>
       </div>
     </div>
