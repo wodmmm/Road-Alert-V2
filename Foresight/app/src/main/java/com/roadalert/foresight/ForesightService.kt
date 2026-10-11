@@ -68,6 +68,12 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
     private lateinit var audioManager: AudioManager
     private var focusRequest: AudioFocusRequest? = null
     
+    // Preferences & Modules
+    private lateinit var prefs: AlertPreferences
+    private val speedCameraManager = SpeedCameraManager()
+    private var isSpeedingAlertActive = false
+    private var currentSpeedLimitMph: Int? = null
+    
     // State
     data class VRUState(val id: String, var lat: Double, var lon: Double, var type: String, var ts: Long, var lastDist: Double?, var alertStage: Int, var lastLogTime: Long = 0L)
     private val vruStore = mutableMapOf<String, VRUState>()
@@ -77,6 +83,7 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
 
     override fun onCreate() {
         super.onCreate()
+        prefs = AlertPreferences(this)
         createNotificationChannels()
         
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -86,10 +93,15 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // ACTION_START just arms the service — GPS and MQTT stay off until
-        // Activity Recognition confirms the user is IN_VEHICLE.
         if (intent?.action == ACTION_START) {
-            Log.d("MotoristService", "Service armed. Waiting for vehicle activity...")
+            Log.d("ForesightService", "Start Journey requested by user.")
+            startMonitoring()
+        } else if (intent?.action == ACTION_STOP) {
+            Log.d("ForesightService", "Stop Journey requested by user.")
+            stopMonitoring()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
         }
         
         if (intent != null && ActivityTransitionResult.hasResult(intent)) {
@@ -198,13 +210,16 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
 
     private fun setupGPS() {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000).build()
+        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 2000).build()
         
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 locationResult.lastLocation?.let {
                     myLocation = it
-                    updateProximity()
+                    if (prefs.vruAlertsEnabled) {
+                        updateProximity()
+                    }
+                    evaluateSpeedAndCameras(it)
                 }
             }
         }
@@ -340,6 +355,59 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
+    private fun evaluateSpeedAndCameras(loc: Location) {
+        val speedMps = if (loc.hasSpeed()) loc.speed else 0f
+        val speedMph = (speedMps * 2.23694f).toInt()
+
+        // 1. Speed Limit & Overshoot Chime
+        currentSpeedLimitMph?.let { limit ->
+            if (prefs.speedAlertsEnabled) {
+                val toleranceFactor = 1.0 + (prefs.speedTolerancePercent / 100.0)
+                val thresholdMph = (limit * toleranceFactor).toInt()
+
+                if (speedMph > thresholdMph) {
+                    if (!isSpeedingAlertActive) {
+                        isSpeedingAlertActive = true
+                        if (prefs.audioChimeEnabled) {
+                            AudioChimeGenerator.playSpeedOvershootChime()
+                        }
+                    }
+                } else if (speedMph <= limit) {
+                    // Reset when vehicle drops back below the posted limit
+                    isSpeedingAlertActive = false
+                }
+            }
+        }
+
+        // 2. Speed Camera Detection
+        if (prefs.speedCamerasEnabled) {
+            val cameraMatch = speedCameraManager.evaluate(loc)
+            cameraMatch?.let { (camera, dist) ->
+                val typeDesc = when (camera.type) {
+                    CameraType.AVERAGE_SPEED -> "Average speed camera"
+                    CameraType.RED_LIGHT -> "Red light camera"
+                    CameraType.MOBILE_HOTSPOT -> "Mobile speed camera hotspot"
+                    else -> "Speed camera"
+                }
+                val spokenMsg = if (camera.speedLimitMph > 0) {
+                    "$typeDesc, ${camera.speedLimitMph} miles per hour"
+                } else {
+                    typeDesc
+                }
+
+                if (prefs.audioChimeEnabled) {
+                    AudioChimeGenerator.playDualToneChime {
+                        if (prefs.voiceAlertsEnabled) {
+                            playAudioAlert(spokenMsg)
+                        }
+                    }
+                } else if (prefs.voiceAlertsEnabled) {
+                    playAudioAlert(spokenMsg)
+                }
+            }
+        }
+    }
+
     private fun triggerAlert(vru: VRUState) {
         val label = when (vru.type) {
             "HOR" -> "Horse"
@@ -353,8 +421,16 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
         // Android Auto Heads Up Notification
         sendAutoNotification(label, message)
         
-        // Audio Ducking & TTS
-        playAudioAlert(message)
+        // Audio Chime then TTS
+        if (prefs.audioChimeEnabled) {
+            AudioChimeGenerator.playDualToneChime {
+                if (prefs.voiceAlertsEnabled) {
+                    playAudioAlert(message)
+                }
+            }
+        } else if (prefs.voiceAlertsEnabled) {
+            playAudioAlert(message)
+        }
     }
 
     private fun playAudioAlert(message: String) {
