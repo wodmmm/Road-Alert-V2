@@ -9,3 +9,27 @@ scratch/
 bridge/
 *.log
 .reticulum/
+
+# Android & Gradle
+.gradle/
+build/
+**/build/
+*.apk
+*.aab
+.cxx/
+local.properties
+
+# Web / Dashboard
+node_modules/
+dist/
+dev-dist/
+
+# Android Studio / IntelliJ / VS Code
+.idea/
+*.iml
+.vscode/
+captures/
+.externalNativeBuild/
+
+
+
