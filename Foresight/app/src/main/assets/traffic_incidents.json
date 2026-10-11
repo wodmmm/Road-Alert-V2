@@ -1,0 +1,24 @@
+[
+  {
+    "id": "inc-m5-j21-laneclose",
+    "roadName": "M5",
+    "roadType": "MOTORWAY",
+    "direction": "Southbound",
+    "locationDescription": "near Junction 21",
+    "summary": "Lane closure",
+    "lat": 51.3520,
+    "lon": -2.9060,
+    "headingDeg": 215.0
+  },
+  {
+    "id": "inc-a361-wsm-delay",
+    "roadName": "A361",
+    "roadType": "A_ROAD",
+    "direction": "Eastbound",
+    "locationDescription": "near Weston-super-Mare",
+    "summary": "Incident causing 30 minute delays",
+    "lat": 51.3400,
+    "lon": -2.9200,
+    "headingDeg": 90.0
+  }
+]

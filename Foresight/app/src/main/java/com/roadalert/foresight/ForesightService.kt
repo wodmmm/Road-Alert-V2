@@ -72,6 +72,7 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
     private lateinit var prefs: AlertPreferences
     private val speedCameraManager = SpeedCameraManager()
     private val trafficIncidentManager = TrafficIncidentManager()
+    private val weatherAlertManager = WeatherAlertManager()
     private var isSpeedingAlertActive = false
     private var currentSpeedLimitMph: Int? = null
     
@@ -90,6 +91,7 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         tts = TextToSpeech(this, this)
         
+        loadOfflineDatasets()
         setupActivityRecognition()
     }
 
@@ -222,6 +224,7 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
                     }
                     evaluateSpeedAndCameras(it)
                     evaluateTrafficAndRoadworks(it)
+                    evaluateWeather(it)
                 }
             }
         }
@@ -431,6 +434,98 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
                 playAudioAlert(spokenAlert)
             }
         }
+    }
+
+    private fun evaluateWeather(loc: Location) {
+        if (!prefs.weatherAlertsEnabled) return
+
+        val zoneMatch = weatherAlertManager.evaluate(loc)
+        zoneMatch?.let { zone ->
+            sendAutoNotification("Weather Warning", zone.spokenWarning)
+
+            if (prefs.audioChimeEnabled) {
+                AudioChimeGenerator.playDualToneChime {
+                    if (prefs.voiceAlertsEnabled) {
+                        playAudioAlert(zone.spokenWarning)
+                    }
+                }
+            } else if (prefs.voiceAlertsEnabled) {
+                playAudioAlert(zone.spokenWarning)
+            }
+        }
+    }
+
+    private fun loadOfflineDatasets() {
+        Thread {
+            try {
+                // 1. Load Speed Cameras
+                assets.open("speed_cameras.json").bufferedReader().use { reader ->
+                    val jsonArray = org.json.JSONArray(reader.readText())
+                    val list = mutableListOf<SpeedCamera>()
+                    for (i in 0 until jsonArray.length()) {
+                        val obj = jsonArray.getJSONObject(i)
+                        list.add(
+                            SpeedCamera(
+                                id = obj.getString("id"),
+                                lat = obj.getDouble("lat"),
+                                lon = obj.getDouble("lon"),
+                                speedLimitMph = obj.getInt("speedLimitMph"),
+                                type = CameraType.valueOf(obj.getString("type")),
+                                headingDeg = if (obj.has("headingDeg")) obj.getDouble("headingDeg").toFloat() else null
+                            )
+                        )
+                    }
+                    speedCameraManager.loadCameras(list)
+                }
+
+                // 2. Load Traffic Incidents
+                assets.open("traffic_incidents.json").bufferedReader().use { reader ->
+                    val jsonArray = org.json.JSONArray(reader.readText())
+                    val list = mutableListOf<TrafficIncident>()
+                    for (i in 0 until jsonArray.length()) {
+                        val obj = jsonArray.getJSONObject(i)
+                        list.add(
+                            TrafficIncident(
+                                id = obj.getString("id"),
+                                roadName = obj.getString("roadName"),
+                                roadType = RoadClassification.valueOf(obj.getString("roadType")),
+                                direction = obj.getString("direction"),
+                                locationDescription = obj.getString("locationDescription"),
+                                summary = obj.getString("summary"),
+                                lat = obj.getDouble("lat"),
+                                lon = obj.getDouble("lon"),
+                                headingDeg = if (obj.has("headingDeg")) obj.getDouble("headingDeg").toFloat() else null
+                            )
+                        )
+                    }
+                    trafficIncidentManager.updateIncidents(list)
+                }
+
+                // 3. Load Weather Hazards
+                assets.open("weather_hazards.json").bufferedReader().use { reader ->
+                    val jsonArray = org.json.JSONArray(reader.readText())
+                    val list = mutableListOf<WeatherHazardZone>()
+                    for (i in 0 until jsonArray.length()) {
+                        val obj = jsonArray.getJSONObject(i)
+                        list.add(
+                            WeatherHazardZone(
+                                id = obj.getString("id"),
+                                condition = WeatherCondition.valueOf(obj.getString("condition")),
+                                severity = WeatherSeverity.valueOf(obj.getString("severity")),
+                                description = obj.getString("description"),
+                                spokenWarning = obj.getString("spokenWarning"),
+                                lat = obj.getDouble("lat"),
+                                lon = obj.getDouble("lon"),
+                                radiusMeters = obj.getDouble("radiusMeters")
+                            )
+                        )
+                    }
+                    weatherAlertManager.updateZones(list)
+                }
+            } catch (e: Exception) {
+                Log.e("ForesightService", "Error loading offline datasets", e)
+            }
+        }.start()
     }
 
     private fun triggerAlert(vru: VRUState) {

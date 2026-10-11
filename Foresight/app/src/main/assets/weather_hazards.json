@@ -1,0 +1,22 @@
+[
+  {
+    "id": "wz-severn-crosswinds",
+    "condition": "HIGH_CROSSWINDS",
+    "severity": "WARNING",
+    "description": "High crosswinds on bridge crossing",
+    "spokenWarning": "Caution: severe crosswinds reported ahead. Reduce speed.",
+    "lat": 51.5833,
+    "lon": -2.6333,
+    "radiusMeters": 4000.0
+  },
+  {
+    "id": "wz-mendips-ice",
+    "condition": "FREEZING_ICE",
+    "severity": "SEVERE",
+    "description": "Sub-zero surface temperatures with black ice hazard",
+    "spokenWarning": "Warning: freezing road temperatures detected. Risk of surface ice.",
+    "lat": 51.3120,
+    "lon": -2.7650,
+    "radiusMeters": 6000.0
+  }
+]
