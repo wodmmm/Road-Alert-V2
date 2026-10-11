@@ -73,6 +73,9 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
     private val speedCameraManager = SpeedCameraManager()
     private val trafficIncidentManager = TrafficIncidentManager()
     private val weatherAlertManager = WeatherAlertManager()
+    private val liveTrafficService = LiveTrafficService()
+    private val liveWeatherService = LiveWeatherService()
+    private var lastLiveFetchTime = 0L
     private var isSpeedingAlertActive = false
     private var currentSpeedLimitMph: Int? = null
     
@@ -225,6 +228,7 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
                     evaluateSpeedAndCameras(it)
                     evaluateTrafficAndRoadworks(it)
                     evaluateWeather(it)
+                    triggerLiveFeedUpdateIfNeeded(it)
                 }
             }
         }
@@ -526,6 +530,35 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
                 Log.e("ForesightService", "Error loading offline datasets", e)
             }
         }.start()
+    }
+
+    private fun triggerLiveFeedUpdateIfNeeded(loc: Location) {
+        val now = System.currentTimeMillis()
+        // Refresh live feeds every 10 minutes (600,000 ms) or immediately upon first GPS lock
+        if (now - lastLiveFetchTime > 600000L) {
+            lastLiveFetchTime = now
+            Log.d("ForesightService", "Fetching live National Highways incidents and Open-Meteo weather...")
+
+            // 1. Fetch live UK National Highways incidents
+            if (prefs.roadworksTrafficEnabled) {
+                liveTrafficService.fetchLiveIncidents(loc, object : LiveTrafficService.Callback {
+                    override fun onIncidentsUpdated(incidents: List<TrafficIncident>) {
+                        Log.d("ForesightService", "Live traffic feed updated: ${incidents.size} active incidents loaded")
+                        trafficIncidentManager.updateIncidents(incidents)
+                    }
+                })
+            }
+
+            // 2. Fetch live adverse road weather hazards
+            if (prefs.weatherAlertsEnabled) {
+                liveWeatherService.fetchLiveWeather(loc, object : LiveWeatherService.Callback {
+                    override fun onWeatherZonesUpdated(zones: List<WeatherHazardZone>) {
+                        Log.d("ForesightService", "Live weather hazards updated: ${zones.size} active warning zones")
+                        weatherAlertManager.updateZones(zones)
+                    }
+                })
+            }
+        }
     }
 
     private fun triggerAlert(vru: VRUState) {

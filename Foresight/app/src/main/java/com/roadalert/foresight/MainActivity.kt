@@ -50,7 +50,7 @@ class MainActivity : AppCompatActivity() {
         root.addView(titleTv)
 
         val subtitleTv = TextView(this).apply {
-            text = "Headless Driving Safety Co-Pilot"
+            text = "Headless Driver Safety Assistant"
             textSize = 14f
             setTextColor(Color.parseColor("#94A3B8"))
             gravity = Gravity.CENTER
@@ -170,7 +170,7 @@ class MainActivity : AppCompatActivity() {
         """.trimIndent()
 
         if (isRunning) {
-            statusBadgeTv.text = "● CO-PILOT ACTIVE"
+            statusBadgeTv.text = "● FORESIGHT ACTIVE"
             statusBadgeTv.setTextColor(Color.parseColor("#4ADE80")) // accent_green
             startStopBtn.text = "STOP JOURNEY"
             startStopBtn.setBackgroundColor(Color.parseColor("#EF4444")) // alert_red
@@ -189,7 +189,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         AlertDialog.Builder(this)
-            .setTitle("Start Foresight Co-Pilot")
+            .setTitle("Start Foresight")
             .setMessage("Foresight runs completely in the background.\n\nYou can turn off the screen or put your phone away. Audio alerts and chimes will play automatically through your car's Bluetooth or phone speaker.")
             .setPositiveButton("Confirm & Drive") { _, _ ->
                 startForesightService()
