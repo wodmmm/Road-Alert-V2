@@ -74,11 +74,18 @@ class TrafficIncidentManager {
                         return Pair(inc, 2) // Final warning
                     }
                 }
-                RoadClassification.A_ROAD, RoadClassification.B_ROAD, RoadClassification.OTHER -> {
-                    // A/B roads 2km alert
+                RoadClassification.A_ROAD -> {
+                    // A-roads 2km alert
                     if (dist <= 2000.0 && inc.stage == 0) {
                         inc.stage = 2
                         return Pair(inc, 2)
+                    }
+                }
+                RoadClassification.B_ROAD, RoadClassification.OTHER -> {
+                    // Local roads / residential / B-roads: Alert at 800m
+                    if (dist <= 800.0 && inc.stage == 0) {
+                        inc.stage = 3
+                        return Pair(inc, 3)
                     }
                 }
             }
@@ -95,9 +102,14 @@ class TrafficIncidentManager {
      * Generates clear spoken text for TTS.
      */
     fun buildSpokenAlert(incident: TrafficIncident, tier: Int): String {
-        val distanceDesc = if (tier == 1) "6 miles ahead" else "1 mile ahead"
+        val distanceDesc = when (tier) {
+            1 -> "6 miles ahead"
+            2 -> "1 mile ahead"
+            3 -> "500 yards ahead"
+            else -> "ahead"
+        }
         val dirPart = if (incident.direction.isNotBlank()) " ${incident.direction}" else ""
-        return "${incident.summary} on the ${incident.roadName}$dirPart ${incident.locationDescription}, $distanceDesc."
+        return "${incident.summary} on ${incident.roadName}$dirPart, $distanceDesc."
     }
 
     private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

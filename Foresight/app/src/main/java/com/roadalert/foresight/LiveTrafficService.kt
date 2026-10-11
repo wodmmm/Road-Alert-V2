@@ -5,11 +5,12 @@ import android.util.Log
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import kotlin.math.roundToInt
+import java.net.URLEncoder
 
 /**
- * Periodically fetches live, anonymous regional road incidents & closures
- * from UK National Highways Open Data / Traffic England RSS & JSON feeds.
+ * Fetches real-time local roadworks, road closures, and construction from:
+ * 1. National Highways (Motorway & trunk network)
+ * 2. OpenStreetMap Overpass (Local council B-roads, street-level construction & closures within 15km)
  */
 class LiveTrafficService {
 
@@ -17,38 +18,127 @@ class LiveTrafficService {
         fun onIncidentsUpdated(incidents: List<TrafficIncident>)
     }
 
-    /**
-     * Polls National Highways RSS/JSON feed for active closures & unplanned events.
-     * Keeps calculations on-device.
-     */
     fun fetchLiveIncidents(loc: Location, callback: Callback) {
         Thread {
+            val combinedList = mutableListOf<TrafficIncident>()
+
+            // 1. Fetch National Highways events
             try {
-                // National Highways open data unplanned events feed
                 val urlStr = "https://m.highwaysengland.co.uk/feeds/rss/UnplannedEvents.xml"
-                val url = URL(urlStr)
-                val conn = url.openConnection() as HttpURLConnection
-                conn.connectTimeout = 10000
-                conn.readTimeout = 10000
+                val conn = URL(urlStr).openConnection() as HttpURLConnection
+                conn.connectTimeout = 8000
+                conn.readTimeout = 8000
                 conn.setRequestProperty("User-Agent", "ForesightRoadAlert/1.0")
 
                 if (conn.responseCode == 200) {
                     val xml = conn.inputStream.bufferedReader().use { it.readText() }
-                    val parsed = parseRssIncidents(xml)
-                    if (parsed.isNotEmpty()) {
-                        callback.onIncidentsUpdated(parsed)
-                    }
+                    combinedList.addAll(parseRssIncidents(xml))
                 }
             } catch (e: Exception) {
-                Log.e("LiveTrafficService", "Failed to fetch National Highways live feed", e)
+                Log.e("LiveTrafficService", "National Highways fetch error", e)
+            }
+
+            // 2. Fetch Local Roadworks & Road Closures (OSM Overpass in a 15km bounding box around driver)
+            try {
+                val localRoadworks = fetchLocalRoadworksOverpass(loc)
+                combinedList.addAll(localRoadworks)
+                Log.d("LiveTrafficService", "Loaded ${localRoadworks.size} local street roadworks/closures")
+            } catch (e: Exception) {
+                Log.e("LiveTrafficService", "Local roadworks fetch error", e)
+            }
+
+            if (combinedList.isNotEmpty()) {
+                callback.onIncidentsUpdated(combinedList)
             }
         }.start()
+    }
+
+    /**
+     * Queries OpenStreetMap Overpass for active road closures & road construction
+     * within a 0.15 degree (~15km) bounding box around the vehicle.
+     */
+    private fun fetchLocalRoadworksOverpass(loc: Location): List<TrafficIncident> {
+        val list = mutableListOf<TrafficIncident>()
+        try {
+            val delta = 0.12 // ~13km box
+            val south = loc.latitude - delta
+            val north = loc.latitude + delta
+            val west = loc.longitude - delta
+            val east = loc.longitude + delta
+
+            // Overpass query for construction or conditional closures on roads
+            val query = """
+                [out:json][timeout:10];
+                (
+                  way["highway"="construction"]($south,$west,$north,$east);
+                  way["hazard"="roadworks"]($south,$west,$north,$east);
+                  way["highway"]["access:conditional"]($south,$west,$north,$east);
+                );
+                out center 40;
+            """.trimIndent()
+
+            val urlStr = "https://overpass-api.de/api/interpreter?data=" + URLEncoder.encode(query, "UTF-8")
+            val conn = URL(urlStr).openConnection() as HttpURLConnection
+            conn.connectTimeout = 8000
+            conn.readTimeout = 8000
+            conn.setRequestProperty("User-Agent", "ForesightRoadAlert/1.0")
+
+            if (conn.responseCode == 200) {
+                val resp = conn.inputStream.bufferedReader().use { it.readText() }
+                val root = JSONObject(resp)
+                val elements = root.optJSONArray("elements")
+
+                if (elements != null) {
+                    for (i in 0 until elements.length()) {
+                        val elem = elements.getJSONObject(i)
+                        val tags = elem.optJSONObject("tags") ?: continue
+                        val center = elem.optJSONObject("center") ?: continue
+                        val lat = center.optDouble("lat", 0.0)
+                        val lon = center.optDouble("lon", 0.0)
+                        if (lat == 0.0 || lon == 0.0) continue
+
+                        val name = tags.optString("name", tags.optString("ref", "Local Road"))
+                        val highway = tags.optString("highway", "")
+                        val construction = tags.optString("construction", "")
+
+                        val roadType = when {
+                            name.startsWith("A") -> RoadClassification.A_ROAD
+                            name.startsWith("B") -> RoadClassification.B_ROAD
+                            else -> RoadClassification.OTHER
+                        }
+
+                        val summary = when {
+                            tags.has("access:conditional") -> "Road closed"
+                            construction.isNotBlank() || highway == "construction" -> "Roadworks"
+                            else -> "Road hazard"
+                        }
+
+                        val description = tags.optString("description", "roadworks in progress")
+
+                        list.add(
+                            TrafficIncident(
+                                id = "osm-work-${elem.optLong("id", i.toLong())}",
+                                roadName = name,
+                                roadType = roadType,
+                                direction = "",
+                                locationDescription = description,
+                                summary = summary,
+                                lat = lat,
+                                lon = lon
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("LiveTrafficService", "Failed to query local Overpass roadworks", e)
+        }
+        return list
     }
 
     private fun parseRssIncidents(xml: String): List<TrafficIncident> {
         val list = mutableListOf<TrafficIncident>()
         try {
-            // Basic lightweight XML parsing for <item> blocks
             val itemRegex = Regex("<item>(.*?)</item>", RegexOption.DOT_MATCHES_ALL)
             val titleRegex = Regex("<title>(.*?)</title>")
             val descRegex = Regex("<description>(.*?)</description>")
@@ -67,7 +157,6 @@ class LiveTrafficService {
                         val lat = parts[0].toDoubleOrNull() ?: continue
                         val lon = parts[1].toDoubleOrNull() ?: continue
 
-                        // Extract road name (e.g. "M5", "M4", "A38", "A30")
                         val roadMatch = Regex("\\b([MA]\\d+)\\b").find(title)
                         val roadName = roadMatch?.groupValues?.get(1) ?: "Road"
                         val roadType = when {
@@ -76,7 +165,6 @@ class LiveTrafficService {
                             else -> RoadClassification.OTHER
                         }
 
-                        // Extract direction if present
                         val dir = when {
                             title.contains("southbound", ignoreCase = true) || desc.contains("southbound", ignoreCase = true) -> "Southbound"
                             title.contains("northbound", ignoreCase = true) || desc.contains("northbound", ignoreCase = true) -> "Northbound"
@@ -85,15 +173,14 @@ class LiveTrafficService {
                             else -> ""
                         }
 
-                        // Short summary
                         val summary = when {
+                            desc.contains("closed", ignoreCase = true) || title.contains("closed", ignoreCase = true) -> "Road closed"
                             desc.contains("lane closure", ignoreCase = true) || title.contains("lane closure", ignoreCase = true) -> "Lane closure"
                             desc.contains("accident", ignoreCase = true) || title.contains("accident", ignoreCase = true) -> "Accident"
                             desc.contains("roadworks", ignoreCase = true) || title.contains("roadworks", ignoreCase = true) -> "Roadworks"
                             else -> "Incident"
                         }
 
-                        // Clean title for location context
                         val cleanLoc = title.replace(Regex("^[A-Z0-9]+\\s*"), "").take(60)
 
                         list.add(
