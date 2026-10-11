@@ -71,6 +71,7 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
     // Preferences & Modules
     private lateinit var prefs: AlertPreferences
     private val speedCameraManager = SpeedCameraManager()
+    private val trafficIncidentManager = TrafficIncidentManager()
     private var isSpeedingAlertActive = false
     private var currentSpeedLimitMph: Int? = null
     
@@ -220,6 +221,7 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
                         updateProximity()
                     }
                     evaluateSpeedAndCameras(it)
+                    evaluateTrafficAndRoadworks(it)
                 }
             }
         }
@@ -404,6 +406,29 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
                 } else if (prefs.voiceAlertsEnabled) {
                     playAudioAlert(spokenMsg)
                 }
+            }
+        }
+    }
+
+    private fun evaluateTrafficAndRoadworks(loc: Location) {
+        if (!prefs.roadworksTrafficEnabled) return
+
+        val incidentMatch = trafficIncidentManager.evaluate(loc)
+        incidentMatch?.let { (incident, tier) ->
+            val spokenAlert = trafficIncidentManager.buildSpokenAlert(incident, tier)
+
+            // Android Auto notification
+            sendAutoNotification(incident.roadName, spokenAlert)
+
+            // Play dual-tone chime followed by spoken voice announcement
+            if (prefs.audioChimeEnabled) {
+                AudioChimeGenerator.playDualToneChime {
+                    if (prefs.voiceAlertsEnabled) {
+                        playAudioAlert(spokenAlert)
+                    }
+                }
+            } else if (prefs.voiceAlertsEnabled) {
+                playAudioAlert(spokenAlert)
             }
         }
     }
