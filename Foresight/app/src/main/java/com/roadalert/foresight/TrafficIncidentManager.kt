@@ -54,10 +54,16 @@ class TrafficIncidentManager {
         for (inc in incidents) {
             val dist = calculateDistance(currentLoc.latitude, currentLoc.longitude, inc.lat, inc.lon)
 
-            // Check if incident is ahead in vehicle's general heading (+/- 65 degrees)
+            // Bearing cone: wider for fast roads (motorway/A-road), tighter for local streets.
+            // Tight cone on local roads prevents parallel-street false positives.
             val bearingToIncident = calculateBearing(currentLoc.latitude, currentLoc.longitude, inc.lat, inc.lon)
             val headingDelta = abs(bearingDifference(currentLoc.bearing, bearingToIncident.toFloat()))
-            val isAhead = headingDelta <= 65.0f
+            val bearingCone = when (inc.roadType) {
+                RoadClassification.MOTORWAY -> 65.0f
+                RoadClassification.A_ROAD   -> 55.0f
+                else                        -> 35.0f  // B-road / local — must be directly ahead
+            }
+            val isAhead = headingDelta <= bearingCone
 
             if (!isAhead) continue
 

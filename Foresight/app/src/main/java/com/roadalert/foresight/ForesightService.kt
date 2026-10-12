@@ -1,4 +1,4 @@
-package com.roadalert.foresight
+﻿package com.roadalert.foresight
 
 import android.Manifest
 import android.app.Notification
@@ -78,7 +78,8 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
     private var lastLiveFetchTime = 0L
     private var isSpeedingAlertActive = false
     private var currentSpeedLimitMph: Int? = null
-    
+    private val speedLimitZones = mutableListOf<SpeedLimitZone>()
+
     // State
     data class VRUState(val id: String, var lat: Double, var lon: Double, var type: String, var ts: Long, var lastDist: Double?, var alertStage: Int, var lastLogTime: Long = 0L)
     private val vruStore = mutableMapOf<String, VRUState>()
@@ -183,7 +184,7 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
             setupGPS()
             Thread { connectMQTT() }.start()
             updateNotification()
-            logEvent("MONITORING_START", null, null, null, null)
+            logJourneyEvent("MONITORING_START", null)
             Log.d("MotoristService", "Monitoring Started")
         }
     }
@@ -204,7 +205,7 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
             try { mqttClient?.disconnect() } catch (e: Exception) {}
             vruStore.clear()
             updateNotification()
-            logEvent("MONITORING_STOP", null, null, null, null)
+            logJourneyEvent("MONITORING_STOP", null)
             Log.d("MotoristService", "Monitoring Stopped")
         }
     }
@@ -335,17 +336,17 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
                 shouldSpeak = isGettingCloser
                 if (shouldSpeak) {
                     vru.alertStage = 1
-                    logEvent("ALERT_DYNAMIC", loc, vru, dist, triggerDistance)
+                    logJourneyEvent("ALERT_VRU", loc, "${vru.type} id:${vru.id}", dist)
                 }
             } else if (dist <= 100.0 && vru.alertStage == 0) {
                 shouldSpeak = true // Failsafe fallback, always alert if not already warned
                 vru.alertStage = 1
-                logEvent("ALERT_FALLBACK", loc, vru, dist, triggerDistance)
+                logJourneyEvent("ALERT_VRU_FALLBACK", loc, "${vru.type} id:${vru.id}", dist)
             }
             
             if (dist <= 800.0 && (now - vru.lastLogTime > 4000)) {
                 vru.lastLogTime = now
-                logEvent("VRU_PROXIMITY_UPDATE", loc, vru, dist, triggerDistance)
+                logJourneyEvent("VRU_PROXIMITY", loc, "${vru.type} id:${vru.id} dist:${dist?.toInt()}m", dist)
             }
             
             if (shouldSpeak) {
@@ -368,7 +369,10 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
         val speedMps = if (loc.hasSpeed()) loc.speed else 0f
         val speedMph = (speedMps * 2.23694f).toInt()
 
-        // 1. Speed Limit & Overshoot Chime
+        // 1. Determine current speed limit from nearest OSM zone (within 300m)
+        updateCurrentSpeedLimit(loc)
+
+        // 2. Speed Limit & Overshoot Chime
         currentSpeedLimitMph?.let { limit ->
             if (prefs.speedAlertsEnabled) {
                 val toleranceFactor = 1.0 + (prefs.speedTolerancePercent / 100.0)
@@ -377,32 +381,35 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
                 if (speedMph > thresholdMph) {
                     if (!isSpeedingAlertActive) {
                         isSpeedingAlertActive = true
+                        logJourneyEvent("ALERT_SPEED_OVERSHOOT", loc,
+                            "Speed: ${speedMph}mph, Limit: ${limit}mph")
                         if (prefs.audioChimeEnabled) {
                             AudioChimeGenerator.playSpeedOvershootChime()
                         }
                     }
                 } else if (speedMph <= limit) {
-                    // Reset when vehicle drops back below the posted limit
                     isSpeedingAlertActive = false
                 }
             }
         }
 
-        // 2. Speed Camera Detection
+        // 3. Speed Camera Detection
         if (prefs.speedCamerasEnabled) {
             val cameraMatch = speedCameraManager.evaluate(loc)
             cameraMatch?.let { (camera, dist) ->
                 val typeDesc = when (camera.type) {
-                    CameraType.AVERAGE_SPEED -> "Average speed camera"
-                    CameraType.RED_LIGHT -> "Red light camera"
+                    CameraType.AVERAGE_SPEED  -> "Average speed camera"
+                    CameraType.RED_LIGHT      -> "Red light camera"
                     CameraType.MOBILE_HOTSPOT -> "Mobile speed camera hotspot"
-                    else -> "Speed camera"
+                    else                      -> "Speed camera"
                 }
                 val spokenMsg = if (camera.speedLimitMph > 0) {
                     "$typeDesc, ${camera.speedLimitMph} miles per hour"
                 } else {
                     typeDesc
                 }
+                logJourneyEvent("ALERT_SPEED_CAMERA", loc,
+                    "$typeDesc at ${dist.toInt()}m (limit: ${camera.speedLimitMph}mph)", dist)
 
                 if (prefs.audioChimeEnabled) {
                     AudioChimeGenerator.playDualToneChime {
@@ -417,12 +424,49 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
+    /**
+     * Finds the nearest road segment with a known speed limit within 300m.
+     * Updates currentSpeedLimitMph and logs when the limit changes.
+     */
+    private fun updateCurrentSpeedLimit(loc: Location) {
+        if (speedLimitZones.isEmpty()) return
+
+        var nearestDist = Double.MAX_VALUE
+        var nearestLimit = -1
+
+        for (zone in speedLimitZones) {
+            val dist = getDistance(loc.latitude, loc.longitude, zone.lat, zone.lon)
+            if (dist < nearestDist) {
+                nearestDist = dist
+                nearestLimit = zone.limitMph
+            }
+        }
+
+        // Only apply if within 300m of a known road segment
+        if (nearestDist <= 300.0 && nearestLimit > 0) {
+            if (nearestLimit != currentSpeedLimitMph) {
+                val prev = currentSpeedLimitMph
+                currentSpeedLimitMph = nearestLimit
+                if (prev != null) {
+                    logJourneyEvent("SPEED_LIMIT_CHANGE", loc,
+                        "Limit changed: ${prev}mph → ${nearestLimit}mph")
+                }
+            }
+        }
+    }
+
+
+
     private fun evaluateTrafficAndRoadworks(loc: Location) {
         if (!prefs.roadworksTrafficEnabled) return
 
         val incidentMatch = trafficIncidentManager.evaluate(loc)
         incidentMatch?.let { (incident, tier) ->
             val spokenAlert = trafficIncidentManager.buildSpokenAlert(incident, tier)
+
+            logJourneyEvent("ALERT_TRAFFIC", loc,
+                "${incident.summary} on ${incident.roadName} ${incident.direction} " +
+                "(tier $tier, ${incident.locationDescription.take(60)})")
 
             // Android Auto notification
             sendAutoNotification(incident.roadName, spokenAlert)
@@ -445,6 +489,9 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
 
         val zoneMatch = weatherAlertManager.evaluate(loc)
         zoneMatch?.let { zone ->
+            logJourneyEvent("ALERT_WEATHER", loc,
+                "${zone.condition} - ${zone.description.take(80)}")
+
             sendAutoNotification("Weather Warning", zone.spokenWarning)
 
             if (prefs.audioChimeEnabled) {
@@ -458,6 +505,7 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
             }
         }
     }
+
 
     private fun loadOfflineDatasets() {
         Thread {
@@ -534,32 +582,56 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
 
     private fun triggerLiveFeedUpdateIfNeeded(loc: Location) {
         val now = System.currentTimeMillis()
-        // Refresh live feeds every 10 minutes (600,000 ms) or immediately upon first GPS lock
-        if (now - lastLiveFetchTime > 600000L) {
+        // Refresh live feeds every 5 minutes (300,000 ms) or immediately upon first GPS lock
+        if (now - lastLiveFetchTime > 300000L) {
             lastLiveFetchTime = now
-            Log.d("ForesightService", "Fetching live National Highways incidents and Open-Meteo weather...")
+            Log.d("ForesightService", "Refreshing live feeds (traffic, cameras, speed limits, weather)...")
 
-            // 1. Fetch live UK National Highways incidents
+            // 1. Live UK traffic incidents (National Highways RSS + OSM local roadworks)
             if (prefs.roadworksTrafficEnabled) {
                 liveTrafficService.fetchLiveIncidents(loc, object : LiveTrafficService.Callback {
                     override fun onIncidentsUpdated(incidents: List<TrafficIncident>) {
-                        Log.d("ForesightService", "Live traffic feed updated: ${incidents.size} active incidents loaded")
+                        Log.d("ForesightService", "Traffic feed updated: ${incidents.size} incidents")
                         trafficIncidentManager.updateIncidents(incidents)
                     }
                 })
             }
 
-            // 2. Fetch live adverse road weather hazards
+            // 2. Live speed cameras from OSM (real UK camera locations)
+            if (prefs.speedCamerasEnabled) {
+                liveTrafficService.fetchLiveSpeedCameras(loc, object : LiveTrafficService.SpeedCameraCallback {
+                    override fun onCamerasUpdated(cameras: List<SpeedCamera>) {
+                        Log.d("ForesightService", "Speed cameras updated: ${cameras.size} cameras")
+                        speedCameraManager.loadCameras(cameras)
+                    }
+                })
+            }
+
+            // 3. Road speed limits from OSM (enables overshoot chime)
+            if (prefs.speedAlertsEnabled) {
+                liveTrafficService.fetchLiveSpeedLimits(loc, object : LiveTrafficService.SpeedLimitCallback {
+                    override fun onSpeedLimitsUpdated(zones: List<SpeedLimitZone>) {
+                        Log.d("ForesightService", "Speed limit zones updated: ${zones.size} segments")
+                        synchronized(speedLimitZones) {
+                            speedLimitZones.clear()
+                            speedLimitZones.addAll(zones)
+                        }
+                    }
+                })
+            }
+
+            // 4. Live adverse weather hazards (Open-Meteo, no API key)
             if (prefs.weatherAlertsEnabled) {
                 liveWeatherService.fetchLiveWeather(loc, object : LiveWeatherService.Callback {
                     override fun onWeatherZonesUpdated(zones: List<WeatherHazardZone>) {
-                        Log.d("ForesightService", "Live weather hazards updated: ${zones.size} active warning zones")
+                        Log.d("ForesightService", "Weather hazards updated: ${zones.size} active warnings")
                         weatherAlertManager.updateZones(zones)
                     }
                 })
             }
         }
     }
+
 
     private fun triggerAlert(vru: VRUState) {
         val label = when (vru.type) {
@@ -669,43 +741,51 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
             .build()
     }
 
-    private fun logEvent(
+    /**
+     * Writes a structured event row to a date-stamped CSV journey log.
+     * File: /sdcard/Android/data/com.roadalert.foresight/files/journey_log_YYYY-MM-DD.csv
+     * One file per day — export from Files app or ADB for post-journey review.
+     *
+     * EventTypes: MONITORING_START, MONITORING_STOP, ALERT_VRU, VRU_PROXIMITY_UPDATE,
+     *             ALERT_SPEED_CAMERA, ALERT_SPEED_OVERSHOOT, SPEED_LIMIT_CHANGE,
+     *             ALERT_TRAFFIC, ALERT_WEATHER
+     */
+    private fun logJourneyEvent(
         eventType: String,
         loc: Location?,
-        vru: VRUState?,
-        dist: Double?,
-        triggerDistance: Double?
+        details: String = "",
+        distanceMeters: Double? = null
     ) {
         try {
             val fileDir = getExternalFilesDir(null) ?: return
-            val file = File(fileDir, "safety_log.csv")
+
+            val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            dateFmt.timeZone = TimeZone.getTimeZone("UTC")
+            val dateStr = dateFmt.format(Date())
+
+            val file = File(fileDir, "journey_log_$dateStr.csv")
             val isNewFile = !file.exists()
-            
+
             val fw = FileWriter(file, true)
             if (isNewFile) {
-                fw.write("Timestamp,EventType,MotoristLat,MotoristLon,MotoristSpeed,VruId,VruType,VruLat,VruLon,Distance,TriggerDistance\n")
+                fw.write("Timestamp,EventType,Lat,Lon,SpeedMph,SpeedLimitMph,Details,DistanceMeters\n")
             }
-            
-            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-            sdf.timeZone = TimeZone.getTimeZone("UTC")
-            val timestamp = sdf.format(Date())
-            
-            val motoristLat = loc?.latitude?.toString() ?: ""
-            val motoristLon = loc?.longitude?.toString() ?: ""
-            val motoristSpeed = loc?.speed?.toString() ?: ""
-            
-            val vruId = vru?.id ?: ""
-            val vruType = vru?.type ?: ""
-            val vruLat = vru?.lat?.toString() ?: ""
-            val vruLon = vru?.lon?.toString() ?: ""
-            
-            val distStr = dist?.let { String.format(Locale.US, "%.2f", it) } ?: ""
-            val trigDistStr = triggerDistance?.let { String.format(Locale.US, "%.2f", it) } ?: ""
-            
-            fw.write("$timestamp,$eventType,$motoristLat,$motoristLon,$motoristSpeed,$vruId,$vruType,$vruLat,$vruLon,$distStr,$trigDistStr\n")
+
+            val tsFmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+            tsFmt.timeZone = TimeZone.getTimeZone("UTC")
+            val timestamp = tsFmt.format(Date())
+
+            val lat      = loc?.latitude?.toString() ?: ""
+            val lon      = loc?.longitude?.toString() ?: ""
+            val speedMph = loc?.speed?.let { (it * 2.23694f).toInt().toString() } ?: ""
+            val limitMph = currentSpeedLimitMph?.toString() ?: ""
+            val distStr  = distanceMeters?.let { String.format(Locale.US, "%.0f", it) } ?: ""
+            val safeDetails = details.replace(",", ";")
+
+            fw.write("$timestamp,$eventType,$lat,$lon,$speedMph,$limitMph,$safeDetails,$distStr\n")
             fw.close()
         } catch (e: Exception) {
-            Log.e("MotoristService", "Failed to write log to CSV", e)
+            Log.e("ForesightService", "Failed to write journey log", e)
         }
     }
 
@@ -720,3 +800,4 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
 
     override fun onBind(intent: Intent): IBinder? = null
 }
+
