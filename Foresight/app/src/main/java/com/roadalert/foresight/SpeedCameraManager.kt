@@ -7,7 +7,8 @@ enum class CameraType {
     FIXED,
     AVERAGE_SPEED,
     RED_LIGHT,
-    MOBILE_HOTSPOT
+    MOBILE_HOTSPOT,
+    VARIABLE_SPEED   // Smart motorway / variable gantry — no fixed limit to announce
 }
 
 data class SpeedCamera(

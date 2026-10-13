@@ -123,9 +123,17 @@ class LiveTrafficService {
                             val highway = tags.optString("highway", "road")
                             val limitMph = parseMaxspeedMph(maxspeedStr, highway)
 
+                            // Detect variable/smart motorway cameras from OSM tags
+                            val isVariable = tags.optString("maxspeed:variable", "") == "yes" ||
+                                tags.optString("variable_maxspeed", "") == "yes" ||
+                                tags.optString("source:maxspeed", "").contains("variable", ignoreCase = true) ||
+                                tags.optString("camera:type", "").contains("variable", ignoreCase = true) ||
+                                maxspeedStr.equals("variable", ignoreCase = true)
+
                             val typeStr = tags.optString("camera:type",
                                 tags.optString("enforcement:type", "fixed"))
                             val camType = when {
+                                isVariable -> CameraType.VARIABLE_SPEED
                                 typeStr.contains("average", ignoreCase = true) -> CameraType.AVERAGE_SPEED
                                 typeStr.contains("red_light", ignoreCase = true) -> CameraType.RED_LIGHT
                                 typeStr.contains("mobile", ignoreCase = true) -> CameraType.MOBILE_HOTSPOT

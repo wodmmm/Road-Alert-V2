@@ -88,8 +88,8 @@ class TrafficIncidentManager {
                     }
                 }
                 RoadClassification.B_ROAD, RoadClassification.OTHER -> {
-                    // Local roads / residential / B-roads: Alert at 800m
-                    if (dist <= 800.0 && inc.stage == 0) {
+                    // Local roads / residential / B-roads: Alert at 400m
+                    if (dist <= 400.0 && inc.stage == 0) {
                         inc.stage = 3
                         return Pair(inc, 3)
                     }

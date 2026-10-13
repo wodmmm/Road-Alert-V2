@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foresight → Google Earth</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    padding: 40px 20px;
+  }
+
+  h1 { font-size: 24px; color: #58a6ff; font-weight: 700; }
+  h1 span { color: #8b949e; font-weight: 400; font-size: 16px; display: block; margin-top: 4px; }
+
+  #drop-zone {
+    width: 100%;
+    max-width: 520px;
+    border: 2px dashed #30363d;
+    border-radius: 16px;
+    padding: 60px 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #161b22;
+  }
+  #drop-zone:hover, #drop-zone.drag-over {
+    border-color: #58a6ff;
+    background: rgba(88,166,255,0.06);
+  }
+  #drop-zone .icon { font-size: 48px; margin-bottom: 16px; }
+  #drop-zone p { color: #8b949e; font-size: 14px; line-height: 1.6; }
+  #drop-zone strong { color: #e6edf3; }
+  #drop-zone input { display: none; }
+
+  #status {
+    width: 100%;
+    max-width: 520px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 20px 24px;
+    display: none;
+  }
+
+  #summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat {
+    background: #0d1117;
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+  }
+  .stat-label { font-size: 10px; text-transform: uppercase; color: #8b949e; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .stat-value { font-size: 22px; font-weight: 700; }
+
+  #download-btn {
+    width: 100%;
+    padding: 14px;
+    background: #238636;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  #download-btn:hover { background: #2ea043; }
+
+  .legend {
+    width: 100%;
+    max-width: 520px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 16px 24px;
+  }
+  .legend h3 { font-size: 12px; text-transform: uppercase; color: #8b949e; letter-spacing: 0.5px; margin-bottom: 12px; }
+  .legend-item { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 13px; color: #8b949e; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+
+  .tip {
+    width: 100%;
+    max-width: 520px;
+    font-size: 12px;
+    color: #484f58;
+    line-height: 1.6;
+    text-align: center;
+  }
+  .tip a { color: #58a6ff; }
+</style>
+</head>
+<body>
+
+<h1>🚗 Foresight Journey Viewer
+  <span>Convert your journey log to Google Earth KML</span>
+</h1>
+
+<label id="drop-zone">
+  <div class="icon">📂</div>
+  <p><strong>Drop your journey_log CSV here</strong><br>or click to browse</p>
+  <input type="file" id="file-input" accept=".csv">
+</label>
+
+<div id="status">
+  <div id="summary">
+    <div class="stat"><div class="stat-label">Duration</div><div class="stat-value" id="s-duration" style="color:#58a6ff">—</div></div>
+    <div class="stat"><div class="stat-label">GPS Points</div><div class="stat-value" id="s-points" style="color:#8b949e">—</div></div>
+    <div class="stat"><div class="stat-label">Total Alerts</div><div class="stat-value" id="s-alerts" style="color:#FF6B35">—</div></div>
+    <div class="stat"><div class="stat-label">VRU</div><div class="stat-value" id="s-vru" style="color:#FF6B35">—</div></div>
+    <div class="stat"><div class="stat-label">Traffic</div><div class="stat-value" id="s-traffic" style="color:#E63946">—</div></div>
+    <div class="stat"><div class="stat-label">Cameras</div><div class="stat-value" id="s-camera" style="color:#C084FC">—</div></div>
+    <div class="stat"><div class="stat-label">Overshoot</div><div class="stat-value" id="s-speed" style="color:#FCD34D">—</div></div>
+    <div class="stat"><div class="stat-label">Limit Chng</div><div class="stat-value" id="s-limit" style="color:#34D399">—</div></div>
+    <div class="stat"><div class="stat-label">File</div><div class="stat-value" id="s-file" style="color:#8b949e;font-size:13px;margin-top:4px">—</div></div>
+  </div>
+  <button id="download-btn" onclick="downloadKML()">⬇ Download KML — Open in Google Earth</button>
+</div>
+
+<div class="legend">
+  <h3>Colour key in Google Earth</h3>
+  <div class="legend-item"><div class="legend-dot" style="background:#58a6ff"></div>GPS route track</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#FF6B35"></div>VRU alert (horse, cyclist, walker)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#E63946"></div>Traffic / roadworks alert</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#C084FC"></div>Speed camera detected</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#FCD34D"></div>Speed overshoot chime</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#34D399"></div>Speed limit change detected</div>
+</div>
+
+<p class="tip">
+  After downloading, double-click the .kml file to open in Google Earth.<br>
+  Or go to <a href="https://www.google.com/maps/d/" target="_blank">Google My Maps</a> → Create map → Import → upload the KML.
+</p>
+
+<script>
+let kmlContent = '';
+let outputFilename = 'journey.kml';
+
+// ── File handling ────────────────────────────────────────────────────────────
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  loadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => loadFile(e.target.files[0]));
+document.body.addEventListener('dragover', e => e.preventDefault());
+document.body.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = [...e.dataTransfer.files].find(f => f.name.endsWith('.csv'));
+  if (f) loadFile(f);
+});
+
+function loadFile(file) {
+  if (!file) return;
+  outputFilename = file.name.replace('.csv', '.kml');
+  const reader = new FileReader();
+  reader.onload = e => processCSV(e.target.result, file.name);
+  reader.readAsText(file);
+}
+
+// ── CSV → KML ────────────────────────────────────────────────────────────────
+function processCSV(text, filename) {
+  const lines = text.trim().split('\n').filter(l => l.trim());
+  if (lines.length < 2) return;
+
+  const header = lines[0].split(',');
+  const col = {};
+  header.forEach((h, i) => col[h.trim()] = i);
+
+  const rows = lines.slice(1).map(line => {
+    const parts = line.split(',');
+    return {
+      ts:      parts[col['Timestamp']]?.trim() || '',
+      type:    parts[col['EventType']]?.trim() || '',
+      lat:     parseFloat(parts[col['Lat']]) || null,
+      lon:     parseFloat(parts[col['Lon']]) || null,
+      speed:   parseInt(parts[col['SpeedMph']]) || 0,
+      limit:   parseInt(parts[col['SpeedLimitMph']]) || 0,
+      details: parts.slice(col['Details']).join(',').replace(/^,|,$/g,'').trim(),
+      dist:    parseFloat(parts[col['DistanceMeters']]) || 0,
+    };
+  }).filter(r => r.type);
+
+  // Stats
+  const gpsRows     = rows.filter(r => r.lat && r.lon);
+  const vruAlerts   = rows.filter(r => r.type === 'ALERT_VRU' || r.type === 'ALERT_VRU_FALLBACK');
+  const traffic     = rows.filter(r => r.type === 'ALERT_TRAFFIC');
+  const cameras     = rows.filter(r => r.type === 'ALERT_SPEED_CAMERA');
+  const overshoot   = rows.filter(r => r.type === 'ALERT_SPEED_OVERSHOOT');
+  const limitChange = rows.filter(r => r.type === 'SPEED_LIMIT_CHANGE');
+  const totalAlerts = vruAlerts.length + traffic.length + cameras.length + overshoot.length;
+
+  // Duration
+  const starts  = rows.filter(r => r.type === 'MONITORING_START' && r.ts);
+  const allTimes = rows.filter(r => r.ts).map(r => new Date(r.ts).getTime()).filter(t => !isNaN(t));
+  let duration = '—';
+  if (starts.length && allTimes.length) {
+    const t0 = new Date(starts[0].ts).getTime();
+    const t1 = Math.max(...allTimes);
+    const mins = Math.round((t1 - t0) / 60000);
+    duration = mins >= 60 ? `${Math.floor(mins/60)}h ${mins%60}m` : `${mins}m`;
+  }
+
+  document.getElementById('s-duration').textContent = duration;
+  document.getElementById('s-points').textContent   = gpsRows.length;
+  document.getElementById('s-alerts').textContent   = totalAlerts;
+  document.getElementById('s-vru').textContent      = vruAlerts.length;
+  document.getElementById('s-traffic').textContent  = traffic.length;
+  document.getElementById('s-camera').textContent   = cameras.length;
+  document.getElementById('s-speed').textContent    = overshoot.length;
+  document.getElementById('s-limit').textContent    = limitChange.length;
+  document.getElementById('s-file').textContent     = filename;
+  document.getElementById('status').style.display   = 'block';
+
+  kmlContent = buildKML(rows, gpsRows, vruAlerts, traffic, cameras, overshoot, limitChange, filename);
+}
+
+// ── KML builder ──────────────────────────────────────────────────────────────
+// KML colours are AABBGGRR (alpha, blue, green, red — reversed from HTML)
+const KML_COLORS = {
+  track:    'ffff8858', // blue  #58A6FF
+  vru:      'ff356bff', // orange #FF6B35
+  traffic:  'ff4639e6', // red   #E63946
+  camera:   'fffc84c0', // purple #C084FC
+  speed:    'ff4dd3fc', // yellow #FCD34D
+  limit:    'ff99d334', // green  #34D399
+};
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function styleXml(id, color, scale) {
+  return `
+  <Style id="${id}">
+    <IconStyle>
+      <color>${color}</color>
+      <scale>${scale}</scale>
+      <Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon>
+    </IconStyle>
+    <LabelStyle><scale>0</scale></LabelStyle>
+  </Style>`;
+}
+
+function placemark(row, styleId, label) {
+  if (!row.lat || !row.lon) return '';
+  const speedInfo = row.speed ? `Speed: ${row.speed}mph` : '';
+  const limitInfo = row.limit ? ` / Limit: ${row.limit}mph` : '';
+  const distInfo  = row.dist  ? `\nDistance: ${row.dist.toFixed(0)}m` : '';
+  const localTime = row.ts ? row.ts.replace('T',' ').replace('Z',' UTC') : '';
+  const desc = `<![CDATA[
+    <b>${label}</b><br>
+    🕐 ${esc(localTime)}<br>
+    ${speedInfo ? `🚗 ${esc(speedInfo)}${esc(limitInfo)}<br>` : ''}
+    ${row.details ? `📋 ${esc(row.details)}<br>` : ''}
+    ${distInfo ? `📏 ${esc(distInfo)}<br>` : ''}
+  ]]>`;
+  const when = row.ts ? `<TimeStamp><when>${row.ts}</when></TimeStamp>` : '';
+  return `
+    <Placemark>
+      ${when}
+      <name>${esc(label)}</name>
+      <description>${desc}</description>
+      <styleUrl>#${styleId}</styleUrl>
+      <Point><coordinates>${row.lon},${row.lat},0</coordinates></Point>
+    </Placemark>`;
+}
+
+function folderKML(name, styleId, label, rows) {
+  if (rows.length === 0) return '';
+  return `
+  <Folder>
+    <name>${name} (${rows.length})</name>
+    <open>1</open>
+    ${rows.map(r => placemark(r, styleId, label)).join('')}
+  </Folder>`;
+}
+
+function buildKML(rows, gpsRows, vruAlerts, traffic, cameras, overshoot, limitChange, filename) {
+  const trackCoords = gpsRows.map(r => `${r.lon},${r.lat},0`).join('\n          ');
+  const firstTs = rows.find(r => r.ts)?.ts || '';
+  const lastTs  = [...rows].reverse().find(r => r.ts)?.ts || '';
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+  <name>Foresight Journey — ${esc(filename.replace('.csv',''))}</name>
+  <description>Generated by Foresight Road Alert</description>
+
+  ${styleXml('trackStyle',  KML_COLORS.track,   0.7)}
+  ${styleXml('vruStyle',    KML_COLORS.vru,     1.2)}
+  ${styleXml('trafficStyle',KML_COLORS.traffic, 1.1)}
+  ${styleXml('cameraStyle', KML_COLORS.camera,  1.1)}
+  ${styleXml('speedStyle',  KML_COLORS.speed,   1.0)}
+  ${styleXml('limitStyle',  KML_COLORS.limit,   0.8)}
+
+  <Style id="trackLineStyle">
+    <LineStyle>
+      <color>${KML_COLORS.track}</color>
+      <width>3</width>
+    </LineStyle>
+    <PolyStyle><fill>0</fill></PolyStyle>
+  </Style>
+
+  <!-- GPS Route Track -->
+  <Folder>
+    <name>GPS Track (${gpsRows.length} points)</name>
+    <open>1</open>
+    <Placemark>
+      <name>Route</name>
+      <styleUrl>#trackLineStyle</styleUrl>
+      <LineString>
+        <tessellate>1</tessellate>
+        <coordinates>
+          ${trackCoords}
+        </coordinates>
+      </LineString>
+    </Placemark>
+  </Folder>
+
+  ${folderKML('🟠 VRU Alerts',             'vruStyle',    'VRU Alert',           vruAlerts)}
+  ${folderKML('🔴 Traffic / Roadworks',    'trafficStyle','Traffic Alert',        traffic)}
+  ${folderKML('🟣 Speed Cameras',          'cameraStyle', 'Speed Camera',         cameras)}
+  ${folderKML('🟡 Speed Overshoot',        'speedStyle',  'Speed Overshoot',      overshoot)}
+  ${folderKML('🟢 Speed Limit Changes',   'limitStyle',  'Speed Limit Change',   limitChange)}
+
+</Document>
+</kml>`;
+}
+
+function downloadKML() {
+  if (!kmlContent) return;
+  const blob = new Blob([kmlContent], { type: 'application/vnd.google-earth.kml+xml' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = outputFilename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>

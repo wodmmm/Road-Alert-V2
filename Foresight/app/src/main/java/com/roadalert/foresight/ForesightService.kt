@@ -1,4 +1,4 @@
-﻿package com.roadalert.foresight
+package com.roadalert.foresight
 
 import android.Manifest
 import android.app.Notification
@@ -79,6 +79,14 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
     private var isSpeedingAlertActive = false
     private var currentSpeedLimitMph: Int? = null
     private val speedLimitZones = mutableListOf<SpeedLimitZone>()
+
+    // Speed limit stability filter — require 3 consecutive matching readings before applying
+    private var pendingSpeedLimit: Int = -1
+    private var pendingSpeedLimitCount: Int = 0
+
+    // Cooldowns to prevent alert spam
+    private var lastOvershootAlertTime = 0L   // 60s between overshoot chimes
+    private var lastCameraAlertTime    = 0L   // 30s between camera alerts
 
     // State
     data class VRUState(val id: String, var lat: Double, var lon: Double, var type: String, var ts: Long, var lastDist: Double?, var alertStage: Int, var lastLogTime: Long = 0L)
@@ -368,19 +376,21 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
     private fun evaluateSpeedAndCameras(loc: Location) {
         val speedMps = if (loc.hasSpeed()) loc.speed else 0f
         val speedMph = (speedMps * 2.23694f).toInt()
+        val now = System.currentTimeMillis()
 
-        // 1. Determine current speed limit from nearest OSM zone (within 300m)
+        // 1. Determine current speed limit from nearest OSM zone with stability filter
         updateCurrentSpeedLimit(loc)
 
-        // 2. Speed Limit & Overshoot Chime
+        // 2. Speed Limit & Overshoot Chime (with 60-second cooldown)
         currentSpeedLimitMph?.let { limit ->
             if (prefs.speedAlertsEnabled) {
                 val toleranceFactor = 1.0 + (prefs.speedTolerancePercent / 100.0)
                 val thresholdMph = (limit * toleranceFactor).toInt()
 
                 if (speedMph > thresholdMph) {
-                    if (!isSpeedingAlertActive) {
+                    if (!isSpeedingAlertActive && (now - lastOvershootAlertTime > 60000L)) {
                         isSpeedingAlertActive = true
+                        lastOvershootAlertTime = now
                         logJourneyEvent("ALERT_SPEED_OVERSHOOT", loc,
                             "Speed: ${speedMph}mph, Limit: ${limit}mph")
                         if (prefs.audioChimeEnabled) {
@@ -393,40 +403,45 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
             }
         }
 
-        // 3. Speed Camera Detection
+        // 3. Speed Camera Detection (with 30-second cooldown to avoid gantry spam)
         if (prefs.speedCamerasEnabled) {
             val cameraMatch = speedCameraManager.evaluate(loc)
             cameraMatch?.let { (camera, dist) ->
-                val typeDesc = when (camera.type) {
-                    CameraType.AVERAGE_SPEED  -> "Average speed camera"
-                    CameraType.RED_LIGHT      -> "Red light camera"
-                    CameraType.MOBILE_HOTSPOT -> "Mobile speed camera hotspot"
-                    else                      -> "Speed camera"
-                }
-                val spokenMsg = if (camera.speedLimitMph > 0) {
-                    "$typeDesc, ${camera.speedLimitMph} miles per hour"
-                } else {
-                    typeDesc
-                }
-                logJourneyEvent("ALERT_SPEED_CAMERA", loc,
-                    "$typeDesc at ${dist.toInt()}m (limit: ${camera.speedLimitMph}mph)", dist)
-
-                if (prefs.audioChimeEnabled) {
-                    AudioChimeGenerator.playDualToneChime {
-                        if (prefs.voiceAlertsEnabled) {
-                            playAudioAlert(spokenMsg)
-                        }
+                if (now - lastCameraAlertTime > 30000L) {
+                    lastCameraAlertTime = now
+                    val typeDesc = when (camera.type) {
+                        CameraType.VARIABLE_SPEED -> "Variable speed camera"
+                        CameraType.AVERAGE_SPEED  -> "Average speed camera"
+                        CameraType.RED_LIGHT      -> "Red light camera"
+                        CameraType.MOBILE_HOTSPOT -> "Mobile speed camera hotspot"
+                        else                      -> "Speed camera"
                     }
-                } else if (prefs.voiceAlertsEnabled) {
-                    playAudioAlert(spokenMsg)
+                    val spokenMsg = when {
+                        camera.type == CameraType.VARIABLE_SPEED -> "Variable speed camera, check overhead signs"
+                        camera.speedLimitMph > 0 -> "$typeDesc, ${camera.speedLimitMph} miles per hour"
+                        else -> typeDesc
+                    }
+                    logJourneyEvent("ALERT_SPEED_CAMERA", loc,
+                        "$typeDesc at ${dist.toInt()}m (limit: ${camera.speedLimitMph}mph)", dist)
+
+                    if (prefs.audioChimeEnabled) {
+                        AudioChimeGenerator.playDualToneChime {
+                            if (prefs.voiceAlertsEnabled) {
+                                playAudioAlert(spokenMsg)
+                            }
+                        }
+                    } else if (prefs.voiceAlertsEnabled) {
+                        playAudioAlert(spokenMsg)
+                    }
                 }
             }
         }
     }
 
     /**
-     * Finds the nearest road segment with a known speed limit within 300m.
-     * Updates currentSpeedLimitMph and logs when the limit changes.
+     * Finds the nearest road segment with a known speed limit within 150m.
+     * Ignores private/car-park limits under 15mph.
+     * Requires 3 consecutive updates with the same limit to stabilize before applying.
      */
     private fun updateCurrentSpeedLimit(loc: Location) {
         if (speedLimitZones.isEmpty()) return
@@ -434,24 +449,40 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
         var nearestDist = Double.MAX_VALUE
         var nearestLimit = -1
 
-        for (zone in speedLimitZones) {
-            val dist = getDistance(loc.latitude, loc.longitude, zone.lat, zone.lon)
-            if (dist < nearestDist) {
-                nearestDist = dist
-                nearestLimit = zone.limitMph
+        synchronized(speedLimitZones) {
+            for (zone in speedLimitZones) {
+                // Ignore private accessways, car parks, and walking speed limits
+                if (zone.limitMph < 15) continue
+
+                val dist = getDistance(loc.latitude, loc.longitude, zone.lat, zone.lon)
+                if (dist < nearestDist) {
+                    nearestDist = dist
+                    nearestLimit = zone.limitMph
+                }
             }
         }
 
-        // Only apply if within 300m of a known road segment
-        if (nearestDist <= 300.0 && nearestLimit > 0) {
-            if (nearestLimit != currentSpeedLimitMph) {
+        // Tightened from 300m down to 150m to avoid picking up parallel streets or slip roads
+        if (nearestDist <= 150.0 && nearestLimit >= 15) {
+            if (nearestLimit == pendingSpeedLimit) {
+                pendingSpeedLimitCount++
+            } else {
+                pendingSpeedLimit = nearestLimit
+                pendingSpeedLimitCount = 1
+            }
+
+            // Require 3 consecutive GPS readings (~6 seconds) agreeing on the new limit
+            if (pendingSpeedLimitCount >= 3 && currentSpeedLimitMph != pendingSpeedLimit) {
                 val prev = currentSpeedLimitMph
-                currentSpeedLimitMph = nearestLimit
+                currentSpeedLimitMph = pendingSpeedLimit
                 if (prev != null) {
                     logJourneyEvent("SPEED_LIMIT_CHANGE", loc,
-                        "Limit changed: ${prev}mph → ${nearestLimit}mph")
+                        "Limit changed: ${prev}mph → ${pendingSpeedLimit}mph")
                 }
             }
+        } else {
+            // Reset pending counter if we are far from known limits
+            pendingSpeedLimitCount = 0
         }
     }
 
