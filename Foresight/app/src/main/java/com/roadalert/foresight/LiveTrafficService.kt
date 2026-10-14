@@ -140,14 +140,19 @@ class LiveTrafficService {
                                 else -> CameraType.FIXED
                             }
 
+                            // Extract enforcement direction/heading if available in OSM
+                            val directionStr = tags.optString("direction",
+                                tags.optString("camera:direction", ""))
+                            val heading = directionStr.toFloatOrNull()
+
                             cameras.add(
                                 SpeedCamera(
                                     id = "osm-cam-${elem.optLong("id", i.toLong())}",
                                     lat = lat,
                                     lon = lon,
                                     speedLimitMph = limitMph,
-                                    type = camType
-                                    // headingDeg not available from OSM nodes — rely on distance only
+                                    type = camType,
+                                    headingDeg = heading
                                 )
                             )
                         }
@@ -270,10 +275,15 @@ class LiveTrafficService {
                         val lon = center.optDouble("lon", 0.0)
                         if (lat == 0.0 || lon == 0.0) continue
 
-                        val ref         = tags.optString("ref", "").trim()
-                        val name        = tags.optString("name", "").trim()
-                        val highway     = tags.optString("highway", "").trim()
+                        val ref          = tags.optString("ref", "").trim()
+                        val name         = tags.optString("name", "").trim()
+                        val highway      = tags.optString("highway", "").trim()
                         val construction = tags.optString("construction", "").trim()
+
+                        // Strictly reject non-vehicular ways: footways, cycleways, paths, steps, service alleys
+                        val isNonVehicular = highway in listOf("footway", "cycleway", "path", "pedestrian", "steps", "service", "track", "bridleway") ||
+                                             construction in listOf("footway", "cycleway", "path", "pedestrian", "steps", "service", "track", "bridleway")
+                        if (isNonVehicular) continue
 
                         // Build a meaningful road name: road number (ref) is best,
                         // then the actual street name, then the OSM highway type

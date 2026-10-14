@@ -49,8 +49,20 @@ class SpeedCameraManager {
                 val headingDelta = abs(bearingDifference(currentLoc.bearing, bearingToCam.toFloat()))
 
                 if (headingDelta <= 60.0f) {
-                    alertedCameras.add(cam.id)
-                    return Pair(cam, dist)
+                    // Opposite carriageway check: If camera has an explicit enforcement heading in OSM,
+                    // ensure our vehicle heading aligns with the camera's enforcement direction (within ±60°).
+                    // If traveling opposite (e.g. heading delta > 90°), ignore camera.
+                    val matchesCameraDirection = if (cam.headingDeg != null) {
+                        val cameraFacingDelta = abs(bearingDifference(currentLoc.bearing, cam.headingDeg))
+                        cameraFacingDelta <= 60.0f
+                    } else {
+                        true
+                    }
+
+                    if (matchesCameraDirection) {
+                        alertedCameras.add(cam.id)
+                        return Pair(cam, dist)
+                    }
                 }
             } else if (dist > alertThresholdMeters * 2) {
                 // Reset alert status once driven far past

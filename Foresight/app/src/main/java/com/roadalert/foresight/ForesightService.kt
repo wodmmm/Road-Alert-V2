@@ -451,8 +451,8 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
 
         synchronized(speedLimitZones) {
             for (zone in speedLimitZones) {
-                // Ignore private accessways, car parks, and walking speed limits
-                if (zone.limitMph < 15) continue
+                // Ignore private accessways, car parks, and walking speed limits (UK legal min public road limit is 20mph)
+                if (zone.limitMph < 20) continue
 
                 val dist = getDistance(loc.latitude, loc.longitude, zone.lat, zone.lon)
                 if (dist < nearestDist) {
@@ -463,7 +463,7 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
         }
 
         // Tightened from 300m down to 150m to avoid picking up parallel streets or slip roads
-        if (nearestDist <= 150.0 && nearestLimit >= 15) {
+        if (nearestDist <= 150.0 && nearestLimit >= 20) {
             if (nearestLimit == pendingSpeedLimit) {
                 pendingSpeedLimitCount++
             } else {
