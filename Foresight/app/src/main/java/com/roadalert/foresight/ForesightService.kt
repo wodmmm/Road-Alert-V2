@@ -172,14 +172,18 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun handleActivityTransition(type: Int, transition: Int) {
-        Log.d("MotoristService", "Transition: $type, $transition")
+        Log.d("ForesightService", "Activity Transition: type=$type, transition=$transition")
         
         if (type == DetectedActivity.IN_VEHICLE && transition == ActivityTransition.ACTIVITY_TRANSITION_ENTER) {
+            // Cancel any pending hibernation countdown — we are driving!
+            stopRunnable?.let { handler.removeCallbacks(it) }
+            stopRunnable = null
             startMonitoring()
         } else if (transition == ActivityTransition.ACTIVITY_TRANSITION_ENTER) {
-            // Some other activity started (STILL, WALKING, etc)
-            val bufferMillis = if (type == DetectedActivity.STILL) 300000L else 120000L // 5m for still, 2m for walk/run
-            scheduleStop(bufferMillis)
+            // Any other state (STILL, WALKING, etc.):
+            // Keep VRU shield armed at stationary location for 5 full minutes (covers temporary roadwork lights / queues).
+            // If still not driving after 5 minutes, hibernate completely.
+            scheduleStop(300000L) // 5 minutes (300 seconds)
         }
     }
 
@@ -378,6 +382,13 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
         val speedMph = (speedMps * 2.23694f).toInt()
         val now = System.currentTimeMillis()
 
+        // Standstill / Walking check: If vehicle is stopped or moving under 7 mph,
+        // mute all speed limit evaluation and camera alerts. Zero false chimes when parked or walking!
+        if (speedMph < 7) {
+            isSpeedingAlertActive = false
+            return
+        }
+
         // 1. Determine current speed limit from nearest OSM zone with stability filter
         updateCurrentSpeedLimit(loc)
 
@@ -481,8 +492,18 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
                 }
             }
         } else {
-            // Reset pending counter if we are far from known limits
             pendingSpeedLimitCount = 0
+
+            // Rural Road / National Speed Limit Fallback:
+            // If driving at highway speeds (> 42 mph) and there's no nearby tagged road segment within 200m,
+            // default to UK National Speed Limit (60 mph for single carriageway) instead of staying stuck at a village 30/40mph.
+            val currentSpeedMph = if (loc.hasSpeed()) (loc.speed * 2.23694f).toInt() else 0
+            if (currentSpeedMph >= 43 && nearestDist > 200.0 && currentSpeedLimitMph != null && currentSpeedLimitMph!! < 60) {
+                val prev = currentSpeedLimitMph
+                currentSpeedLimitMph = 60
+                logJourneyEvent("SPEED_LIMIT_CHANGE", loc,
+                    "National Speed Limit fallback: ${prev}mph → 60mph")
+            }
         }
     }
 
