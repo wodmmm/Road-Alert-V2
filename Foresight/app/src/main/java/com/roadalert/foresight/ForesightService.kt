@@ -59,7 +59,8 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
     // MQTT
     private var mqttClient: MqttClient? = null
     private val BROKER_URL = "tcp://51.195.222.99:1883"
-    private val TOPIC = "roadalert/telemetry/#"
+    private val TOPIC_VRU = "roadalert/telemetry/#"
+    private val TOPIC_TRAFFIC = "roadalert/+/traffic"
     private val MQTT_USER = "adam"
     private val MQTT_PASS = "338Locking"
     
@@ -94,7 +95,7 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
     private var isMonitoringActive = false
     private val handler = Handler(Looper.getMainLooper())
     private var stopRunnable: Runnable? = null
-
+    
     override fun onCreate() {
         super.onCreate()
         prefs = AlertPreferences(this)
@@ -253,7 +254,7 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
 
     private fun connectMQTT() {
         try {
-            val clientId = "motorist-" + System.currentTimeMillis()
+            val clientId = "foresight-" + System.currentTimeMillis()
             mqttClient = MqttClient(BROKER_URL, clientId, org.eclipse.paho.client.mqttv3.persist.MemoryPersistence())
             
             val options = MqttConnectOptions()
@@ -268,14 +269,21 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
                 }
                 
                 override fun messageArrived(topic: String?, message: MqttMessage?) {
-                    message?.let { processTelemetry(String(it.payload)) }
+                    val payload = message?.let { String(it.payload) } ?: return
+                    if (topic != null && topic.contains("/traffic")) {
+                        processTrafficIncident(payload)
+                    } else {
+                        processTelemetry(payload)
+                    }
                 }
                 
                 override fun deliveryComplete(token: IMqttDeliveryToken?) {}
             })
             
             mqttClient?.connect(options)
-            mqttClient?.subscribe(TOPIC)
+            // Subscribe to both VRU telemetry and regional TomTom live traffic feeds!
+            mqttClient?.subscribe(arrayOf(TOPIC_VRU, TOPIC_TRAFFIC), intArrayOf(0, 0))
+            Log.d("ForesightService", "Subscribed to MQTT VRU and Traffic topics.")
         } catch (e: Exception) {
             e.printStackTrace()
             Thread.sleep(5000)
@@ -316,6 +324,64 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
             updateProximity()
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    private fun processTrafficIncident(payload: String) {
+        try {
+            val json = JSONObject(payload)
+            val id = json.getString("id")
+            val status = json.optString("status", "ACTIVE")
+
+            if (status == "CLEARED") {
+                trafficIncidentManager.removeIncident(id)
+                Log.d("ForesightService", "Traffic incident resolved: $id")
+                return
+            }
+
+            val road = json.optString("road", "")
+            val desc = json.optString("description", "Traffic incident")
+            val from = json.optString("from", "")
+            val to = json.optString("to", "")
+            val delaySec = json.optInt("delaySeconds", 0)
+            val lengthMeters = json.optInt("lengthMeters", 0)
+            val lat = json.getDouble("lat")
+            val lon = json.getDouble("lon")
+
+            val roadType = when {
+                road.startsWith("M") -> RoadClassification.MOTORWAY
+                road.startsWith("A") -> RoadClassification.A_ROAD
+                road.startsWith("B") -> RoadClassification.B_ROAD
+                else -> RoadClassification.OTHER
+            }
+
+            val summaryBuilder = StringBuilder(desc)
+            if (delaySec >= 60) {
+                val delayMins = delaySec / 60
+                summaryBuilder.append(", ${delayMins} min delay")
+            }
+            if (lengthMeters >= 500) {
+                val miles = lengthMeters / 1609.34
+                summaryBuilder.append(String.format(Locale.US, " (%.1f mile queue)", miles))
+            }
+
+            val locationDesc = if (from.isNotBlank() && to.isNotBlank()) "between $from and $to"
+                               else if (from.isNotBlank()) "near $from" else ""
+
+            val incident = TrafficIncident(
+                id = id,
+                roadName = road.ifBlank { "Road ahead" },
+                roadType = roadType,
+                direction = "",
+                locationDescription = locationDesc,
+                summary = summaryBuilder.toString(),
+                lat = lat,
+                lon = lon
+            )
+
+            trafficIncidentManager.upsertIncident(incident)
+        } catch (e: Exception) {
+            Log.e("ForesightService", "Error parsing TomTom traffic MQTT payload", e)
         }
     }
 
@@ -637,19 +703,9 @@ class ForesightService : Service(), TextToSpeech.OnInitListener {
         // Refresh live feeds every 5 minutes (300,000 ms) or immediately upon first GPS lock
         if (now - lastLiveFetchTime > 300000L) {
             lastLiveFetchTime = now
-            Log.d("ForesightService", "Refreshing live feeds (traffic, cameras, speed limits, weather)...")
+            Log.d("ForesightService", "Refreshing live feeds (cameras, speed limits, weather)...")
 
-            // 1. Live UK traffic incidents (National Highways RSS + OSM local roadworks)
-            if (prefs.roadworksTrafficEnabled) {
-                liveTrafficService.fetchLiveIncidents(loc, object : LiveTrafficService.Callback {
-                    override fun onIncidentsUpdated(incidents: List<TrafficIncident>) {
-                        Log.d("ForesightService", "Traffic feed updated: ${incidents.size} incidents")
-                        trafficIncidentManager.updateIncidents(incidents)
-                    }
-                })
-            }
-
-            // 2. Live speed cameras from OSM (real UK camera locations)
+            // 1. Live speed cameras from OSM (real UK camera locations)
             if (prefs.speedCamerasEnabled) {
                 liveTrafficService.fetchLiveSpeedCameras(loc, object : LiveTrafficService.SpeedCameraCallback {
                     override fun onCamerasUpdated(cameras: List<SpeedCamera>) {

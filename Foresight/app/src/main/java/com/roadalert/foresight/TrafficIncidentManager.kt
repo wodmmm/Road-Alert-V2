@@ -45,6 +45,26 @@ class TrafficIncidentManager {
     }
 
     /**
+     * Upserts an individual live incident received via MQTT from the TomTom relay.
+     */
+    fun upsertIncident(incident: TrafficIncident) {
+        val idx = incidents.indexOfFirst { it.id == incident.id }
+        if (idx >= 0) {
+            incident.stage = incidents[idx].stage
+            incidents[idx] = incident
+        } else {
+            incidents.add(incident)
+        }
+    }
+
+    /**
+     * Removes a resolved incident immediately when CLEARED message arrives.
+     */
+    fun removeIncident(id: String) {
+        incidents.removeAll { it.id == id }
+    }
+
+    /**
      * Evaluates current vehicle position against active traffic incidents.
      * Returns an incident and its alert tier if an alert should be triggered:
      * - Tier 1: 10km Motorway alert
